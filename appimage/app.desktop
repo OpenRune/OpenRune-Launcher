@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=${project.build.finalName}
+Comment=${project.description}
+Exec=${project.build.finalName}
+Icon=app
+Terminal=false
+Type=Application
+Categories=Game;
