@@ -11,7 +11,7 @@ ExtraDiskSpaceRequired=30000000
 ArchitecturesAllowed=x64
 PrivilegesRequired=lowest
 
-WizardSmallImageFile=${basedir}/app_small.bmp
+WizardSmallImageFile=${basedir}/innosetup/app_small.bmp
 WizardImageFile=${basedir}/innosetup/left.bmp
 SetupIconFile=${basedir}/innosetup/app.ico
 UninstallDisplayIcon={app}\OpenRune.exe
@@ -26,9 +26,6 @@ OutputBaseFilename=OpenRuneSetup
 Name: DesktopIcon; Description: "Create a &desktop icon";
 
 [Files]
-Source: "${basedir}\app.ico"; DestDir: "{app}"
-Source: "${basedir}\left.bmp"; DestDir: "{app}"
-Source: "${basedir}\app_small.bmp"; DestDir: "{app}"
 Source: "${basedir}\build\win-x64\OpenRune.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "${basedir}\build\win-x64\OpenRune.jar"; DestDir: "{app}"
 Source: "${basedir}\build\win-x64\launcher_amd64.dll"; DestDir: "{app}"; Flags: ignoreversion

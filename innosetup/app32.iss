@@ -11,7 +11,7 @@ ExtraDiskSpaceRequired=30000000
 ArchitecturesAllowed=x86 x64
 PrivilegesRequired=lowest
 
-WizardSmallImageFile=${basedir}/app_small.bmp
+WizardSmallImageFile=${basedir}/innosetup/app_small.bmp
 WizardImageFile=${basedir}/innosetup/left.bmp
 SetupIconFile=${basedir}/innosetup/app.ico
 UninstallDisplayIcon={app}\OpenRune.exe

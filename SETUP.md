@@ -206,9 +206,9 @@ Make sure CC is selected and replace 'openrune' with 'myCoolName' MAKE SURE ITS 
 
 ## Icons / Images
 
-1. /app.ico [128x128] [Transparent Background]
-2. /app_small.bmp [60x60] [White Background]
-3. /left.bmp [164x314] [Any Background]
+1. /innosetup/app.ico [128x128] [Transparent Background]
+2. /innosetup/app_small.bmp [60x60] [White Background]
+3. /innosetup/left.bmp [164x314] [Any Background]
 4. /appimage/app.png [128x128]  [Transparent Background]
 5. /osx/app.icns https://img2icnsapp.com/how-to-create-the-best-mac-icons/
 
