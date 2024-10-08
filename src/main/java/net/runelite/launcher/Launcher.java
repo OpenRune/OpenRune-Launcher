@@ -1096,5 +1096,4 @@ public class Launcher
 		}
 	}
 
-
 }

@@ -12,8 +12,8 @@ ArchitecturesAllowed=x86 x64
 PrivilegesRequired=lowest
 
 WizardSmallImageFile=${basedir}/app_small.bmp
-WizardImageFile=${basedir}/left.bmp
-SetupIconFile=${basedir}/app.ico
+WizardImageFile=${basedir}/innosetup/left.bmp
+SetupIconFile=${basedir}/innosetup/app.ico
 UninstallDisplayIcon={app}\OpenRune.exe
 
 Compression=lzma2
@@ -26,14 +26,11 @@ OutputBaseFilename=OpenRuneSetup32
 Name: DesktopIcon; Description: "Create a &desktop icon";
 
 [Files]
-Source: "${basedir}\build\win-x86\OpenRune.exe"; DestDir: "{app}"
+Source: "${basedir}\build\win-x86\OpenRune.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "${basedir}\build\win-x86\OpenRune.jar"; DestDir: "{app}"
-Source: "${basedir}\build\win-x86\launcher_x86.dll"; DestDir: "{app}"
+Source: "${basedir}\build\win-x86\launcher_x86.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "${basedir}\build\win-x86\config.json"; DestDir: "{app}"
 Source: "${basedir}\build\win-x86\jre\*"; DestDir: "{app}\jre"; Flags: recursesubdirs
-Source: "${basedir}\app.ico"; DestDir: "{app}"
-Source: "${basedir}\left.bmp"; DestDir: "{app}"
-Source: "${basedir}\app_small.bmp"; DestDir: "{app}"
 
 [Icons]
 ; start menu

@@ -68,10 +68,10 @@ public class ConfigurationFrame extends JFrame
     {
         setTitle(LauncherProperties.getApplicationName() + " Launcher Configuration");
 
-        BufferedImage logo;
-        try (InputStream in = SplashScreen.class.getResourceAsStream("runelite_transparent.png"))
+        BufferedImage iconImage;
+        try (InputStream in = SplashScreen.class.getResourceAsStream("runelite_128.png"))
         {
-            logo = ImageIO.read(in);
+            iconImage = ImageIO.read(in);
         }
         catch (IOException ex)
         {
@@ -79,7 +79,7 @@ public class ConfigurationFrame extends JFrame
         }
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setIconImage(logo);
+        setIconImage(iconImage);
 
         Container pane = getContentPane();
         pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));

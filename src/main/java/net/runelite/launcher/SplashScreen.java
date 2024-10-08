@@ -68,23 +68,26 @@ public class SplashScreen extends JFrame implements ActionListener
 
 	private SplashScreen() throws IOException
 	{
-		BufferedImage logo;
-		try (InputStream in = SplashScreen.class.getResourceAsStream("runelite_transparent.png"))
-		{
-			logo = ImageIO.read(in);
-		}
 
 		setTitle(LauncherProperties.getApplicationName() + " Launcher");
 
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setUndecorated(true);
-		setIconImage(logo);
+		try (InputStream in = SplashScreen.class.getResourceAsStream("runelite_128.png"))
+		{
+			setIconImage(ImageIO.read(in));
+		}
 		setLayout(null);
 		Container pane = getContentPane();
 		pane.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 
 		Font font = new Font(Font.DIALOG, Font.PLAIN, 12);
 
+		BufferedImage logo;
+		try (InputStream in = SplashScreen.class.getResourceAsStream("runelite_splash.png"))
+		{
+			logo = ImageIO.read(in);
+		}
 		JLabel logoLabel = new JLabel(new ImageIcon(logo));
 		pane.add(logoLabel);
 		logoLabel.setBounds(0, 0, WIDTH, WIDTH);

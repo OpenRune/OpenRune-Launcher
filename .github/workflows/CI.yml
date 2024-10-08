@@ -6,20 +6,20 @@ jobs:
   windows:
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: 'true'
       - name: cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.m2/repository
           key: ${{ runner.os }}-cache-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-cache-
-      - run: choco install innosetup --version 6.2.2
+      - run: choco install innosetup --version 6.3.3
       - name: Set up JDK 11
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: 11
           distribution: temurin
@@ -58,7 +58,7 @@ jobs:
       - name: AArch64 installer
         shell: bash
         run: ./build-win-aarch64.sh
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: windows
           path: |
@@ -71,11 +71,11 @@ jobs:
     steps:
       - run: sudo apt update
       - run: sudo apt install -y gcc-9-aarch64-linux-gnu g++-9-aarch64-linux-gnu
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: 'true'
       - name: cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.m2/repository
@@ -83,7 +83,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cache-
       - name: Set up JDK 11
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: 11
           distribution: temurin
@@ -97,12 +97,12 @@ jobs:
         run: chmod +x ./build-linux-aarch64.sh
       - name: linux-aarch64
         run: ./build-linux-aarch64.sh
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: jar
           path: target/OpenRune.jar
           if-no-files-found: error
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: linux
           path: |
@@ -110,16 +110,16 @@ jobs:
             OpenRune-aarch64.AppImage
           if-no-files-found: error
   macos:
-    runs-on: macos-11
+    runs-on: macos-12
     steps:
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: 'true'
       - name: cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             ~/.m2/repository
@@ -127,7 +127,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cache-
       - name: Set up JDK 11
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: 11
           distribution: temurin
@@ -154,14 +154,14 @@ jobs:
       # tar app to keep permissions correct
       - name: tar app
         run: tar -cf app.tar build/macos-x64/OpenRune.app build/macos-aarch64/OpenRune.app build-osx-x64.sh build-osx-aarch64.sh osx/signing.entitlements
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
           path: |
             OpenRune-x64.dmg
             OpenRune-aarch64.dmg
           if-no-files-found: error
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: macos-app
           path: |
