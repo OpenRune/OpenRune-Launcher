@@ -312,4 +312,11 @@ public class FatalErrorDialog extends JDialog
 			+ "Exception: " + err.getClass().getSimpleName() + nl
 			+ "Message: " + MoreObjects.firstNonNull(err.getMessage(), "n/a");
 	}
+
+	public static void showWindow(String message)
+	{
+		new FatalErrorDialog(message).open();
+	}
+
+
 }

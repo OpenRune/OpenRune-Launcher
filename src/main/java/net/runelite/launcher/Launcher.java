@@ -85,6 +85,8 @@ import net.runelite.launcher.beans.Diff;
 import net.runelite.launcher.beans.Platform;
 import org.slf4j.LoggerFactory;
 
+import static net.runelite.launcher.SplashScreen.stage;
+
 @Slf4j
 public class Launcher
 {
@@ -96,6 +98,7 @@ public class Launcher
 	static final String LAUNCHER_EXECUTABLE_NAME_WIN = LauncherProperties.getName() + ".exe";
 	static final String LAUNCHER_EXECUTABLE_NAME_OSX = LauncherProperties.getName();
 	static boolean nativesLoaded;
+	public static String forcedJava = "";
 
 	private static HttpClient httpClient;
 
@@ -290,7 +293,7 @@ public class Launcher
 			}
 
 			SplashScreen.init();
-			SplashScreen.stage(0, "Preparing", "Setting up environment");
+			stage(0, "Preparing", "Setting up environment");
 
 			// Print out system info
 			if (log.isDebugEnabled())
@@ -326,6 +329,17 @@ public class Launcher
 				return;
 			}
 
+			String version = getJavaRuntimeVersion();
+			int majorVersion = getMajorJavaVersion(version);
+
+			if (majorVersion < 11) {
+				log.info("User using below java 11");
+				stage(.05, null, "Checking Java Version");
+				JavaInstaller.init();
+			} else {
+				log.info("User using 11 or above");
+			}
+
 			if (!REPO_DIR.exists() && !REPO_DIR.mkdirs())
 			{
 				log.error("unable to create directory {}", REPO_DIR);
@@ -333,7 +347,8 @@ public class Launcher
 				return;
 			}
 
-			SplashScreen.stage(.05, null, "Downloading bootstrap");
+
+			stage(.05, null, "Downloading bootstrap");
 			Bootstrap bootstrap;
 			try
 			{
@@ -353,11 +368,11 @@ public class Launcher
 				return;
 			}
 
-			SplashScreen.stage(.07, null, "Checking for updates");
+			stage(.07, null, "Checking for updates");
 
 			Updater.update(bootstrap, settings, args);
 
-			SplashScreen.stage(.10, null, "Tidying the cache");
+			stage(.10, null, "Tidying the cache");
 
 			if (jvmOutdated(bootstrap))
 			{
@@ -412,7 +427,7 @@ public class Launcher
 				return;
 			}
 
-			SplashScreen.stage(.80, null, "Verifying");
+			stage(.80, null, "Verifying");
 			try
 			{
 				verifyJarHashes(artifacts);
@@ -425,7 +440,7 @@ public class Launcher
 			}
 
 			final Collection<String> clientArgs = getClientArgs(settings);
-			SplashScreen.stage(.90, "Starting the client", "");
+			stage(.90, "Starting the client", "");
 
 			var classpath = artifacts.stream()
 				.map(dep -> new File(REPO_DIR, dep.getName()))
@@ -705,7 +720,7 @@ public class Launcher
 
 		final double START_PROGRESS = .15;
 		int downloaded = 0;
-		SplashScreen.stage(START_PROGRESS, "Downloading", "");
+		stage(START_PROGRESS, "Downloading", "");
 
 		for (Artifact artifact : toDownload)
 		{
@@ -723,7 +738,7 @@ public class Launcher
 					ByteArrayOutputStream out = new ByteArrayOutputStream();
 					final int totalBytes = totalDownloadBytes;
 					download(diff.getPath(), diff.getHash(), (completed) ->
-						SplashScreen.stage(START_PROGRESS, .80, null, diff.getName(), total + completed, totalBytes, true),
+						stage(START_PROGRESS, .80, null, diff.getName(), total + completed, totalBytes, true),
 						out);
 					downloaded += diff.getSize();
 
@@ -761,7 +776,7 @@ public class Launcher
 			{
 				final int totalBytes = totalDownloadBytes;
 				download(artifact.getPath(), artifact.getHash(), (completed) ->
-					SplashScreen.stage(START_PROGRESS, .80, null, artifact.getName(), total + completed, totalBytes, true),
+					stage(START_PROGRESS, .80, null, artifact.getName(), total + completed, totalBytes, true),
 					fout);
 				downloaded += artifact.getSize();
 			}
@@ -1013,6 +1028,25 @@ public class Launcher
 			log.debug("Error setting dll blacklist", ex);
 		}
 	}
+
+	private static String getJavaRuntimeVersion() {
+		RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
+		return runtimeMXBean.getSpecVersion();
+	}
+
+	private static int getMajorJavaVersion(String version) {
+		String[] versionElements = version.split("\\.");
+
+		int majorVersion;
+		if (version.startsWith("1.")) {
+			majorVersion = Integer.parseInt(versionElements[1]);
+		} else {
+			majorVersion = Integer.parseInt(versionElements[0]);
+		}
+
+		return majorVersion;
+	}
+
 
 	private static native void setBlacklistedDlls(String[] dlls);
 
