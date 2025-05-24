@@ -201,6 +201,7 @@ $colorButton.Add_Click({
     if ($colorDialog.ShowDialog() -eq "OK") {
         $colorBox.BackColor = $colorDialog.Color
         $colorSelected = $true
+       
     }
 })
 
@@ -307,8 +308,10 @@ $submitButton.Add_Click({
     $content += "finalName=$($inputs['finalName'].Text)"
     $content += "lowerName=$($inputs['lowerName'].Text)"
     $content += "website=$($inputs['website'].Text)"
+    $color = $colorBox.BackColor
+    $hex = "#{0:X2}{1:X2}{2:X2}" -f $color.R, $color.G, $color.B
+    $content += "colorScheme=$hex"
     $content += "launcherDescription=$($inputs['launcherDescription'].Text)"
-    $content += "colorScheme=$($colorBox.BackColor.Name)"
 
     $content | Set-Content $propsPath -Encoding UTF8
 
