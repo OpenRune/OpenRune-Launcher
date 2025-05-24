@@ -24,6 +24,8 @@
  */
 package net.runelite.launcher;
 
+import lombok.var;
+
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;

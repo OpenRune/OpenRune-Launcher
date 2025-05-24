@@ -46,10 +46,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
+import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.URL;
 import java.nio.file.Files;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -99,8 +98,6 @@ public class Launcher
 	static final String LAUNCHER_EXECUTABLE_NAME_OSX = LauncherProperties.getName();
 	static boolean nativesLoaded;
 	public static String forcedJava = "";
-
-	private static HttpClient httpClient;
 
 	private static OptionSet parseArgs(String[] args)
 	{
@@ -213,8 +210,8 @@ public class Launcher
 				TrustManagerUtil.setupTrustManager();
 
 				// being called from ForkLauncher. All JVM options are already set.
-				var classpathOpt = String.valueOf(options.valueOf("classpath"));
-				var classpath = Streams.stream(Splitter.on(File.pathSeparatorChar)
+				String classpathOpt = String.valueOf(options.valueOf("classpath"));
+				List<File> classpath = Streams.stream(Splitter.on(File.pathSeparatorChar)
 					.split(classpathOpt))
 					.map(name -> new File(REPO_DIR, name))
 					.collect(Collectors.toList());
@@ -242,7 +239,7 @@ public class Launcher
 				jvmProps.put("sun.java2d.uiScale", Double.toString(settings.scale));
 			}
 
-			final var hardwareAccelMode = settings.hardwareAccelerationMode == HardwareAccelerationMode.AUTO ?
+			final HardwareAccelerationMode hardwareAccelMode = settings.hardwareAccelerationMode == HardwareAccelerationMode.AUTO ?
 				HardwareAccelerationMode.defaultMode(OS.getOs()) : settings.hardwareAccelerationMode;
 			jvmProps.putAll(hardwareAccelMode.toParams(OS.getOs()));
 
@@ -281,11 +278,6 @@ public class Launcher
 				TrustManagerUtil.setupTrustManager();
 			}
 
-			// setup http client after the default SSLContext is set
-			httpClient = HttpClient.newBuilder()
-				.followRedirects(HttpClient.Redirect.ALWAYS)
-				.build();
-
 			if (postInstall)
 			{
 				postInstall(settings);
@@ -318,12 +310,6 @@ public class Launcher
 
 			// fix up permissions before potentially removing the RUNASADMIN compat key
 			if (FilesystemPermissions.check())
-			{
-				// check() opens an error dialog
-				return;
-			}
-
-			if (JagexLauncherCompatibility.check())
 			{
 				// check() opens an error dialog
 				return;
@@ -442,7 +428,7 @@ public class Launcher
 			final Collection<String> clientArgs = getClientArgs(settings);
 			stage(.90, "Starting the client", "");
 
-			var classpath = artifacts.stream()
+			List<File> classpath = artifacts.stream()
 				.map(dep -> new File(REPO_DIR, dep.getName()))
 				.collect(Collectors.toList());
 
@@ -506,77 +492,42 @@ public class Launcher
 		}
 	}
 
-	private static Bootstrap getBootstrap() throws IOException, CertificateException, NoSuchAlgorithmException, InvalidKeyException, SignatureException, VerificationException
-	{
-		HttpRequest bootstrapReq = HttpRequest.newBuilder()
-			.uri(URI.create(LauncherProperties.getBootstrap()))
-			.header("User-Agent", USER_AGENT)
-			.GET()
-			.build();
+	public static Bootstrap getBootstrap() throws IOException, CertificateException,
+			NoSuchAlgorithmException, InvalidKeyException, SignatureException, VerificationException {
+		HttpRequestManager httpRequestManager = new HttpRequestManager();
 
-		HttpRequest bootstrapSigReq = HttpRequest.newBuilder()
-			.uri(URI.create(LauncherProperties.getBootstrapSig()))
-			.header("User-Agent", USER_AGENT)
-			.GET()
-			.build();
-
-		HttpResponse<byte[]> bootstrapResp, bootstrapSigResp;
-
-		try
-		{
-			bootstrapResp = httpClient.send(bootstrapReq, HttpResponse.BodyHandlers.ofByteArray());
-			bootstrapSigResp = httpClient.send(bootstrapSigReq, HttpResponse.BodyHandlers.ofByteArray());
-		}
-		catch (InterruptedException ex)
-		{
-			throw new IOException(ex);
-		}
-
-		if (bootstrapResp.statusCode() != 200)
-		{
-			throw new IOException("Unable to download bootstrap (status code " + bootstrapResp.statusCode() + "): " + new String(bootstrapResp.body()));
-		}
-
-		if (bootstrapSigResp.statusCode() != 200)
-		{
-			throw new IOException("Unable to download bootstrap signature (status code " + bootstrapSigResp.statusCode() + "): " + new String(bootstrapSigResp.body()));
-		}
-
-		final byte[] bytes = bootstrapResp.body();
-		final byte[] signature = bootstrapSigResp.body();
+		byte[] bootstrapBytes = httpRequestManager.sendGet(LauncherProperties.getBootstrap());
+		byte[] signatureBytes = httpRequestManager.sendGet(LauncherProperties.getBootstrapSig());
 
 		Certificate certificate = getCertificate();
 		Signature s = Signature.getInstance("SHA256withRSA");
 		s.initVerify(certificate);
-		s.update(bytes);
+		s.update(bootstrapBytes);
 
-		if (!s.verify(signature))
-		{
+		if (!s.verify(signatureBytes)) {
 			throw new VerificationException("Unable to verify bootstrap signature");
 		}
 
-		Gson g = new Gson();
-		return g.fromJson(new InputStreamReader(new ByteArrayInputStream(bytes)), Bootstrap.class);
+		Gson gson = new Gson();
+		return gson.fromJson(new InputStreamReader(new ByteArrayInputStream(bootstrapBytes)), Bootstrap.class);
 	}
 
 	private static boolean jvmOutdated(Bootstrap bootstrap)
 	{
 		boolean launcherTooOld = bootstrap.getRequiredLauncherVersion() != null &&
-			compareVersion(bootstrap.getRequiredLauncherVersion(), LauncherProperties.getVersion()) > 0;
+				compareVersion(bootstrap.getRequiredLauncherVersion(), LauncherProperties.getVersion()) > 0;
 
 		boolean jvmTooOld = false;
-		try
-		{
-			if (bootstrap.getRequiredJVMVersion() != null)
-			{
-				jvmTooOld = Runtime.Version.parse(bootstrap.getRequiredJVMVersion())
-					.compareTo(Runtime.version()) > 0;
+		try {
+			if (bootstrap.getRequiredJVMVersion() != null) {
+				String requiredJVMVersion = bootstrap.getRequiredJVMVersion();
+				String currentJVMVersion = System.getProperty("java.version");
+				jvmTooOld = compareVersion(requiredJVMVersion, currentJVMVersion) > 0;
 			}
-		}
-		catch (IllegalArgumentException e)
-		{
+		} catch (Exception e) {
 			log.warn("Unable to parse bootstrap version", e);
 		}
+
 
 		if (launcherTooOld)
 		{
@@ -603,7 +554,7 @@ public class Launcher
 
 	private static Collection<String> getClientArgs(LauncherSettings settings)
 	{
-		final var args = new ArrayList<>(settings.clientArguments);
+		final ArrayList<String> args = new ArrayList<>(settings.clientArguments);
 
 		String clientArgs = System.getenv("RUNELITE_ARGS");
 		if (!Strings.isNullOrEmpty(clientArgs))
@@ -629,14 +580,14 @@ public class Launcher
 
 	private static List<String> getJvmArgs(LauncherSettings settings)
 	{
-		var args = new ArrayList<>(settings.jvmArguments);
+		final ArrayList<String> args = new ArrayList<>(settings.jvmArguments);
 
 		if (settings.ipv4)
 		{
 			args.add("-Djava.net.preferIPv4Stack=true");
 		}
 
-		var envArgs = System.getenv("RUNELITE_VMARGS");
+		String envArgs = System.getenv("RUNELITE_VMARGS");
 		if (!Strings.isNullOrEmpty(envArgs))
 		{
 			args.addAll(Splitter.on(' ')
@@ -864,82 +815,65 @@ public class Launcher
 		return certificate;
 	}
 
-	static int compareVersion(String a, String b)
-	{
+	static int compareVersion(String a, String b) {
 		Pattern tok = Pattern.compile("[^0-9a-zA-Z]");
-		return Arrays.compare(tok.split(a), tok.split(b), (x, y) ->
-		{
-			Integer ix = null;
-			try
-			{
-				ix = Integer.parseInt(x);
-			}
-			catch (NumberFormatException e)
-			{
-			}
+		String[] tokensA = tok.split(a);
+		String[] tokensB = tok.split(b);
 
-			Integer iy = null;
-			try
-			{
-				iy = Integer.parseInt(y);
-			}
-			catch (NumberFormatException e)
-			{
-			}
+		int minLength = Math.min(tokensA.length, tokensB.length);
 
-			if (ix == null && iy == null)
-			{
-				return x.compareToIgnoreCase(y);
-			}
+		for (int i = 0; i < minLength; i++) {
+			String tokenA = tokensA[i];
+			String tokenB = tokensB[i];
 
-			if (ix == null)
-			{
-				return -1;
-			}
-			if (iy == null)
-			{
+			Integer intA = null;
+			Integer intB = null;
+
+			try {
+				intA = Integer.parseInt(tokenA);
+			} catch (NumberFormatException ignored) {}
+
+			try {
+				intB = Integer.parseInt(tokenB);
+			} catch (NumberFormatException ignored) {}
+
+			if (intA != null && intB != null) {
+				int compareInt = intA.compareTo(intB);
+				if (compareInt != 0) {
+					return compareInt;
+				}
+			} else if (intA != null) {
 				return 1;
-			}
-
-			if (ix > iy)
-			{
-				return 1;
-			}
-			if (ix < iy)
-			{
+			} else if (intB != null) {
 				return -1;
+			} else {
+				int compareToken = tokenA.compareToIgnoreCase(tokenB);
+				if (compareToken != 0) {
+					return compareToken;
+				}
 			}
+		}
 
-			return 0;
-		});
+		return Integer.compare(tokensA.length, tokensB.length);
 	}
 
 	static void download(String path, String hash, IntConsumer progress, OutputStream out) throws IOException, VerificationException
 	{
-		HttpRequest request = HttpRequest.newBuilder()
-			.uri(URI.create(path))
-			.header("User-Agent", USER_AGENT)
-			.GET()
-			.build();
+		URL url = new URL(path);
+		HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+		conn.setRequestProperty("User-Agent", USER_AGENT);
+		conn.getResponseCode();
 
-		HttpResponse<InputStream> response;
-		try
+		InputStream err = conn.getErrorStream();
+		if (err != null)
 		{
-			response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
-		}
-		catch (InterruptedException ex)
-		{
-			throw new IOException(ex);
-		}
-
-		if (response.statusCode() != 200)
-		{
-			throw new IOException("Unable to download " + path + " (status code " + response.statusCode() + ")");
+			err.close();
+			throw new IOException("Unable to download " + path + " - " + conn.getResponseMessage());
 		}
 
 		int downloaded = 0;
 		HashingOutputStream hout = new HashingOutputStream(Hashing.sha256(), out);
-		try (InputStream in = response.body())
+		try (InputStream in = conn.getInputStream())
 		{
 			int i;
 			byte[] buffer = new byte[1024 * 1024];
@@ -958,10 +892,9 @@ public class Launcher
 		}
 	}
 
-	static boolean isJava17()
-	{
-		// 16 has the same module restrictions as 17, so we'll use the 17 settings for it
-		return Runtime.version().feature() >= 16;
+	static boolean isJava17() {
+		String version = System.getProperty("java.version");
+		return version.startsWith("1.") && Integer.parseInt(version.substring(2, 3)) >= 7;
 	}
 
 	private static void postInstall(LauncherSettings settings)
@@ -990,7 +923,7 @@ public class Launcher
 		}
 
 		String arch = System.getProperty("os.arch");
-		if (!Set.of("x86", "amd64", "aarch64").contains(arch))
+		if (!new HashSet<>(Arrays.asList("x86", "amd64", "aarch64")).contains(arch))
 		{
 			log.debug("System architecture is not supported for launcher natives: {}", arch);
 			return;

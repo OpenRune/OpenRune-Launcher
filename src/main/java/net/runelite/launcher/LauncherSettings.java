@@ -48,6 +48,7 @@ import javax.annotation.Nullable;
 import joptsimple.OptionSet;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import lombok.var;
 import org.slf4j.helpers.MessageFormatter;
 
 @Data

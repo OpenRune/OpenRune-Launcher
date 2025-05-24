@@ -28,7 +28,6 @@ import java.util.*
 
 plugins {
     java
-    checkstyle
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
@@ -63,27 +62,14 @@ dependencies {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
-    options.release.set(11)
+    sourceCompatibility = "1.8"
+    targetCompatibility = "1.8"
 }
+
 
 tasks.withType<AbstractArchiveTask>().configureEach {
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
-}
-
-sourceSets.create("java8") {
-    java.srcDirs("src/main/java8")
-}
-
-tasks.jar {
-    from(sourceSets["java8"].output)
-    duplicatesStrategy = DuplicatesStrategy.WARN
-}
-
-tasks.getByName<JavaCompile>("compileJava8Java") {
-    options.release.unset()
-    sourceCompatibility = "1.8"
-    targetCompatibility = "1.8"
 }
 
 tasks {
@@ -103,11 +89,6 @@ tasks {
             )
         }
     }
-}
-
-checkstyle {
-    toolVersion = "6.11.2"
-    configFile = file("checkstyle.xml")
 }
 
 tasks.register("exportAppName") {
@@ -187,7 +168,6 @@ tasks.register<Copy>("filterOsx") {
 
 tasks.shadowJar {
     from(sourceSets.main.get().output)
-    from(sourceSets.getByName("java8").output)
     minimize {
         exclude(dependency("ch.qos.logback:.*:.*"))
     }

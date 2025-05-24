@@ -57,6 +57,7 @@ import javax.swing.JTextArea;
 import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 import lombok.extern.slf4j.Slf4j;
+import lombok.var;
 
 @Slf4j
 public class FatalErrorDialog extends JDialog

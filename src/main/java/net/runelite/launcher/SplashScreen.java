@@ -45,6 +45,7 @@ import javax.swing.UIManager;
 import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicProgressBarUI;
 import lombok.extern.slf4j.Slf4j;
+import lombok.var;
 
 @Slf4j
 public class SplashScreen extends JFrame implements ActionListener

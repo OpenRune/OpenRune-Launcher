@@ -25,17 +25,9 @@
 package net.runelite.launcher;
 
 import com.google.common.escape.Escapers;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.file.CopyOption;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.SimpleFileVisitor;
+
+import java.io.*;
+import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.time.Instant;
 import java.time.LocalTime;
@@ -54,6 +46,8 @@ import static net.runelite.launcher.Launcher.LAUNCHER_EXECUTABLE_NAME_WIN;
 import static net.runelite.launcher.Launcher.compareVersion;
 import static net.runelite.launcher.Launcher.download;
 import static net.runelite.launcher.Launcher.regQueryString;
+
+import lombok.var;
 import net.runelite.launcher.beans.Bootstrap;
 import net.runelite.launcher.beans.Update;
 import org.w3c.dom.Document;
@@ -78,35 +72,66 @@ class Updater
 		}
 	}
 
+	private static int getPid()
+	{
+		String jvmName = java.lang.management.ManagementFactory.getRuntimeMXBean().getName();
+		try
+		{
+			return Integer.parseInt(jvmName.split("@")[0]);
+		}
+		catch (Exception e)
+		{
+			return -1;
+		}
+	}
+
 	private static void updateMacos(Bootstrap bootstrap, LauncherSettings launcherSettings, String[] args)
 	{
-		ProcessHandle current = ProcessHandle.current();
-		var command = current.info().command();
-		if (command.isEmpty())
+		// Get current process command by using "ps" command in Java 8 since ProcessHandle is not available
+		String command = null;
+		try
+		{
+			Process proc = Runtime.getRuntime().exec(new String[]{"ps", "-p", String.valueOf(getPid()), "-o", "command="});
+			try (BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream())))
+			{
+				command = reader.readLine();
+			}
+			proc.waitFor();
+		}
+		catch (Exception e)
+		{
+			log.debug("Could not get process command", e);
+			return;
+		}
+
+		if (command == null || command.isEmpty())
 		{
 			log.debug("Running process has no command");
 			return;
 		}
 
-		Path path = Paths.get(command.get());
+		Path path = Paths.get(command.split(" ")[0]).toAbsolutePath().normalize();
 
-		// on macOS packr changes the cwd to the resource directory prior to launching the JVM,
-		// causing current.info().command() to return /Applications/RuneLite.app/Contents/Resources/./RuneLite
-		// despite the executable really being at /Applications/RuneLite.app/Contents/MacOS/RuneLite
-		path = path.normalize()
-			.resolveSibling(Path.of("..", "MacOS", path.getFileName().toString()))
-			.normalize();
+		// Fix for packr cwd on macOS:
+		// If the executable path looks like .../RuneLite.app/Contents/Resources/./RuneLite
+		// the real executable is at .../RuneLite.app/Contents/MacOS/RuneLite
+		if (path.toString().contains("/Contents/Resources/"))
+		{
+			path = path.getParent()  // Resources
+					.resolveSibling("MacOS")
+					.resolve(path.getFileName())
+					.normalize();
+		}
 
 		if (!path.getFileName().toString().equals(LAUNCHER_EXECUTABLE_NAME_OSX) || !path.startsWith(RUNELITE_APP))
 		{
-			log.debug("Skipping update check due to not running from installer, command is {}",
-				command.get());
+			log.debug("Skipping update check due to not running from installer, command is {}", command);
 			return;
 		}
 
 		log.debug("Running from installer");
 
-		var newestUpdate = findAvailableUpdate(bootstrap);
+		Update newestUpdate = findAvailableUpdate(bootstrap);
 		if (newestUpdate == null)
 		{
 			return;
@@ -125,30 +150,28 @@ class Updater
 			return;
 		}
 
-		// launcherSettings have the OptionSet applied to them, so we don't want to write them back to disk.
-		// Load a copy for updating the last update attempt
-		var settings = LauncherSettings.loadSettings();
-		var hours = 1 << Math.min(9, settings.lastUpdateAttemptNum); // 512 hours = ~21 days
+		// Load settings for backoff
+		LauncherSettings settings = LauncherSettings.loadSettings();
+		int backoffHours = 1 << Math.min(9, settings.lastUpdateAttemptNum);
+		Instant backoffLimit = Instant.now().minus(backoffHours, ChronoUnit.HOURS);
+
 		if (newestUpdate.getHash().equals(settings.lastUpdateHash)
-			&& Instant.ofEpochMilli(settings.lastUpdateAttemptTime).isAfter(Instant.now().minus(hours, ChronoUnit.HOURS)))
+				&& Instant.ofEpochMilli(settings.lastUpdateAttemptTime).isAfter(backoffLimit))
 		{
 			log.info("Previous upgrade attempt to {} was at {} (backoff: {} hours), skipping", newestUpdate.getVersion(),
-				// logback logs are in local time, so use that to match it
-				LocalTime.from(Instant.ofEpochMilli(settings.lastUpdateAttemptTime).atZone(ZoneId.systemDefault())),
-				hours);
+					LocalTime.from(Instant.ofEpochMilli(settings.lastUpdateAttemptTime).atZone(ZoneId.systemDefault())),
+					backoffHours);
 			return;
 		}
 
-		// check if rollout allows this update
-		// there is no installer on macos to write install_id, so just use random()
+		// Rollout check, no installer on macos so use random()
 		if (newestUpdate.getRollout() > 0. && Math.random() > newestUpdate.getRollout())
 		{
 			log.info("Skipping update {} due to rollout", newestUpdate.getVersion());
 			return;
 		}
 
-		// from here and below the update will be attempted. update settings early so a failed
-		// download counts as an attempt.
+		// Mark update attempt early
 		settings.lastUpdateAttemptTime = System.currentTimeMillis();
 		settings.lastUpdateHash = newestUpdate.getHash();
 		settings.lastUpdateAttemptNum++;
@@ -158,16 +181,17 @@ class Updater
 		{
 			log.info("Downloading launcher {} from {}", newestUpdate.getVersion(), newestUpdate.getUrl());
 
-			var file = Files.createTempFile("rlupdate", "dmg");
+			Path file = Files.createTempFile("rlupdate", "dmg");
 			try (OutputStream fout = Files.newOutputStream(file))
 			{
-				final var name = newestUpdate.getName();
-				final var size = newestUpdate.getSize();
+				final String name = newestUpdate.getName();
+				final long size = newestUpdate.getSize();
+
 				try
 				{
 					download(newestUpdate.getUrl(), newestUpdate.getHash(), (completed) ->
-							SplashScreen.stage(.07, 1., null, name, completed, size, true),
-						fout);
+									SplashScreen.stage(.07, 1., null, name, completed, (int) size, true),
+							fout);
 				}
 				catch (VerificationException e)
 				{
@@ -179,17 +203,16 @@ class Updater
 
 			log.debug("Mounting dmg {}", file);
 
-			var pb = new ProcessBuilder(
-				"hdiutil",
-				"attach",
-				"-nobrowse",
-				"-plist",
-				file.toAbsolutePath().toString()
+			ProcessBuilder pb = new ProcessBuilder(
+					"hdiutil",
+					"attach",
+					"-nobrowse",
+					"-plist",
+					file.toAbsolutePath().toString()
 			);
 			Process process = pb.start();
 			if (!process.waitFor(5, TimeUnit.SECONDS))
 			{
-				// timeout
 				process.destroy();
 				log.error("timeout waiting for hdiutil to attach dmg");
 				return;
@@ -199,24 +222,25 @@ class Updater
 				log.error("error running hdiutil attach");
 				return;
 			}
+
 			String mountPoint;
-			try (var in = process.getInputStream())
+			try (InputStream in = process.getInputStream())
 			{
 				mountPoint = parseHdiutilPlist(in);
 			}
 
-			// point of no return
+			// Point of no return - remove old app and copy new
 			log.debug("Removing old install from {}", RUNELITE_APP);
-			delete(Path.of(RUNELITE_APP));
+			delete(Paths.get(RUNELITE_APP));
 
 			log.debug("Copying new install from {}", mountPoint);
-			copy(Path.of(mountPoint, LauncherProperties.getName() + ".app"), Path.of(RUNELITE_APP));
+			copy(Paths.get(mountPoint, LauncherProperties.getName() + ".app"), Paths.get(RUNELITE_APP));
 
 			log.debug("Unmounting dmg");
 			pb = new ProcessBuilder(
-				"hdiutil",
-				"detach",
-				mountPoint
+					"hdiutil",
+					"detach",
+					mountPoint
 			);
 			pb.start();
 
@@ -225,6 +249,7 @@ class Updater
 			List<String> launchCmd = new ArrayList<>(args.length + 1);
 			launchCmd.add(path.toAbsolutePath().toString());
 			launchCmd.addAll(Arrays.asList(args));
+
 			pb = new ProcessBuilder(launchCmd);
 			pb.environment().put(LauncherProperties.getName().toUpperCase() + "_UPGRADE", "1");
 			pb.start();
@@ -280,8 +305,8 @@ class Updater
 
 	private static void updateWindows(Bootstrap bootstrap, LauncherSettings launcherSettings, String[] args)
 	{
-		ProcessHandle current = ProcessHandle.current();
-		if (current.info().command().isEmpty())
+		String currentCommand = getCurrentJavaProcessCommand();
+		if (currentCommand == null || currentCommand.isEmpty())
 		{
 			log.debug("Running process has no command");
 			return;
@@ -299,12 +324,12 @@ class Updater
 			return;
 		}
 
-		Path path = Paths.get(current.info().command().get());
+		Path path = Paths.get(currentCommand);
 		if (!path.startsWith(installLocation)
-			|| !path.getFileName().toString().equals(LAUNCHER_EXECUTABLE_NAME_WIN))
+				|| !path.getFileName().toString().equals(LAUNCHER_EXECUTABLE_NAME_WIN))
 		{
 			log.debug("Skipping update check due to not running from installer, command is {}",
-				current.info().command().get());
+					currentCommand);
 			return;
 		}
 
@@ -329,34 +354,22 @@ class Updater
 			return;
 		}
 
-		// launcherSettings have the OptionSet applied to them, so we don't want to write them back to disk.
-		// Load a copy for updating the last update attempt
 		var settings = LauncherSettings.loadSettings();
 		var hours = 1 << Math.min(9, settings.lastUpdateAttemptNum); // 512 hours = ~21 days
 		if (newestUpdate.getHash().equals(settings.lastUpdateHash)
-			&& Instant.ofEpochMilli(settings.lastUpdateAttemptTime).isAfter(Instant.now().minus(hours, ChronoUnit.HOURS)))
+				&& Instant.ofEpochMilli(settings.lastUpdateAttemptTime).isAfter(Instant.now().minus(hours, ChronoUnit.HOURS)))
 		{
 			log.info("Previous upgrade attempt to {} was at {} (backoff: {} hours), skipping", newestUpdate.getVersion(),
-				// logback logs are in local time, so use that to match it
-				LocalTime.from(Instant.ofEpochMilli(settings.lastUpdateAttemptTime).atZone(ZoneId.systemDefault())),
-				hours);
+					LocalTime.from(Instant.ofEpochMilli(settings.lastUpdateAttemptTime).atZone(ZoneId.systemDefault())),
+					hours);
 			return;
 		}
 
-		// the installer kills running RuneLite processes, so check that there are no others running
-		List<ProcessHandle> allProcesses = ProcessHandle.allProcesses().collect(Collectors.toList());
-		for (ProcessHandle ph : allProcesses)
+		// Check if any other RuneLite Launcher processes are running:
+		if (isAnotherLauncherProcessRunning(currentCommand))
 		{
-			if (ph.pid() == current.pid())
-			{
-				continue;
-			}
-
-			if (ph.info().command().equals(current.info().command()))
-			{
-				log.info("Skipping update {} due to {} process {}", newestUpdate.getVersion(), LAUNCHER_EXECUTABLE_NAME_WIN, ph);
-				return;
-			}
+			log.info("Skipping update {} due to another process running", newestUpdate.getVersion());
+			return;
 		}
 
 		// check if rollout allows this update
@@ -366,8 +379,6 @@ class Updater
 			return;
 		}
 
-		// from here and below the update will be attempted. update settings early so a failed
-		// download counts as an attempt.
 		settings.lastUpdateAttemptTime = System.currentTimeMillis();
 		settings.lastUpdateHash = newestUpdate.getHash();
 		settings.lastUpdateAttemptNum++;
@@ -385,8 +396,8 @@ class Updater
 				try
 				{
 					download(newestUpdate.getUrl(), newestUpdate.getHash(), (completed) ->
-							SplashScreen.stage(.07, 1., null, name, completed, size, true),
-						fout);
+									SplashScreen.stage(.07, 1., null, name, completed, size, true),
+							fout);
 				}
 				catch (VerificationException e)
 				{
@@ -399,15 +410,15 @@ class Updater
 			log.info("Launching installer version {}", newestUpdate.getVersion());
 
 			var pb = new ProcessBuilder(
-				file.toFile().getAbsolutePath(),
-				"/SILENT"
+					file.toFile().getAbsolutePath(),
+					"/SILENT"
 			);
 			var env = pb.environment();
 
 			var argStr = new StringBuilder();
 			var escaper = Escapers.builder()
-				.addEscape('"', "\\\"")
-				.build();
+					.addEscape('"', "\\\"")
+					.build();
 			for (var arg : args)
 			{
 				if (argStr.length() > 0)
@@ -433,6 +444,50 @@ class Updater
 		catch (IOException e)
 		{
 			log.error("io error performing upgrade", e);
+		}
+	}
+
+	private static String getCurrentJavaProcessCommand()
+	{
+		// Attempt to get the current executable path from a system property or environment variable
+		// This is not straightforward on Java 8; you might need to pass this in from launcher
+		// Alternatively, return the java binary path:
+		String javaHome = System.getProperty("java.home");
+		if (javaHome != null)
+		{
+			Path javaBin = Paths.get(javaHome, "bin", "java.exe");
+			if (Files.exists(javaBin))
+			{
+				return javaBin.toAbsolutePath().toString();
+			}
+		}
+		return null;
+	}
+
+	private static boolean isAnotherLauncherProcessRunning(String currentCommand)
+	{
+		try
+		{
+			Process proc = Runtime.getRuntime().exec("tasklist /FI \"IMAGENAME eq " + LAUNCHER_EXECUTABLE_NAME_WIN + "\"");
+			try (BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream())))
+			{
+				String line;
+				int count = 0;
+				while ((line = reader.readLine()) != null)
+				{
+					if (line.contains(LAUNCHER_EXECUTABLE_NAME_WIN))
+					{
+						count++;
+					}
+				}
+				// if more than one instance of the launcher executable running, then another process is running
+				return count > 1;
+			}
+		}
+		catch (IOException ex)
+		{
+			log.warn("Unable to check for other running processes", ex);
+			return false;
 		}
 	}
 
@@ -494,44 +549,41 @@ class Updater
 	}
 
 	// https://stackoverflow.com/a/27917071
-	private static void delete(Path directory) throws IOException
-	{
-		Files.walkFileTree(directory, new SimpleFileVisitor<>()
-		{
+	private static void delete(Path directory) throws IOException {
+		Files.walkFileTree(directory, new SimpleFileVisitor<Path>() {
 			@Override
-			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException
-			{
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 				Files.delete(file);
 				return FileVisitResult.CONTINUE;
 			}
 
 			@Override
-			public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException
-			{
+			public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
 				Files.delete(dir);
 				return FileVisitResult.CONTINUE;
 			}
 		});
 	}
 
+
 	// https://stackoverflow.com/a/60621544
-	private static void copy(Path source, Path target, CopyOption... options)
-		throws IOException
-	{
-		Files.walkFileTree(source, new SimpleFileVisitor<>()
-		{
+	private static void copy(Path source, Path target, CopyOption... options) throws IOException {
+		Files.walkFileTree(source, new SimpleFileVisitor<Path>() {
 			@Override
-			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs)
-				throws IOException
-			{
-				Files.createDirectories(target.resolve(source.relativize(dir).toString()));
+			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+				Path targetDir = target.resolve(source.relativize(dir).toString());
+				try {
+					Files.copy(dir, targetDir, options);
+				} catch (FileAlreadyExistsException e) {
+					if (!Files.isDirectory(targetDir)) {
+						throw e;
+					}
+				}
 				return FileVisitResult.CONTINUE;
 			}
 
 			@Override
-			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-				throws IOException
-			{
+			public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 				Files.copy(file, target.resolve(source.relativize(file).toString()), options);
 				return FileVisitResult.CONTINUE;
 			}

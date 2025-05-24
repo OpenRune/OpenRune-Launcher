@@ -25,14 +25,19 @@
 package net.runelite.launcher;
 
 import com.google.common.base.Stopwatch;
+
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
+import lombok.var;
+
 import static net.runelite.launcher.Launcher.LAUNCHER_EXECUTABLE_NAME_WIN;
 import static net.runelite.launcher.Launcher.RUNELITE_DIR;
 import static net.runelite.launcher.Launcher.isProcessElevated;
@@ -55,7 +60,7 @@ class FilesystemPermissions
 			return false;
 		}
 
-		final boolean elevated = isProcessElevated(ProcessHandle.current().pid());
+		final boolean elevated = isProcessElevated(getCurrentPid());
 		// It is possible for .runelite to exist but be not writable, even when elevated. But we can update the ACLs
 		// always when elevated, so attempt to fix the ACLs first.
 		if (elevated)
@@ -105,7 +110,13 @@ class FilesystemPermissions
 					var dialog = new FatalErrorDialog(message);
 					if (!elevated)
 					{
-						dialog.addButton("Run as administrator", FilesystemPermissions::runas);
+						dialog.addButton("Run as administrator", () -> {
+							try {
+								FilesystemPermissions.runas();
+							} catch (IOException | InterruptedException e) {
+								log.error("Failed to run as administrator", e);
+							}
+						});
 					}
 					dialog.open();
 				});
@@ -151,7 +162,13 @@ class FilesystemPermissions
 				var dialog = new FatalErrorDialog(message);
 				if (!elevated)
 				{
-					dialog.addButton("Run as administrator", FilesystemPermissions::runas);
+					dialog.addButton("Run as administrator", () -> {
+						try {
+							FilesystemPermissions.runas();
+						} catch (IOException | InterruptedException e) {
+							log.error("Failed to run as administrator", e);
+						}
+					});
 				}
 				dialog.open();
 			});
@@ -159,6 +176,13 @@ class FilesystemPermissions
 		}
 
 		return false;
+	}
+
+	private static long getCurrentPid()
+	{
+		// Use RuntimeMXBean to get current PID (Java 8 compatible)
+		String jvmName = java.lang.management.ManagementFactory.getRuntimeMXBean().getName();
+		return Long.parseLong(jvmName.split("@")[0]);
 	}
 
 	private static boolean checkPermissions(File tree, boolean root)
@@ -242,21 +266,19 @@ class FilesystemPermissions
 			}
 		}
 	}
-
-	private static void runas()
+	private static void runas() throws IOException, InterruptedException
 	{
 		log.info("Relaunching as administrator");
 
-		ProcessHandle current = ProcessHandle.current();
-		var command = current.info().command();
-		if (command.isEmpty())
+		String exePath = getCurrentProcessExecutablePath();
+		if (exePath == null || exePath.isEmpty())
 		{
 			log.error("Running process has no command");
 			System.exit(-1);
 			return;
 		}
 
-		Path path = Paths.get(command.get());
+		Path path = Paths.get(exePath);
 		if (!path.getFileName().toString().equals(LAUNCHER_EXECUTABLE_NAME_WIN))
 		{
 			log.error("Running process is not the launcher: {}", path.getFileName().toString());
@@ -267,5 +289,32 @@ class FilesystemPermissions
 		String commandPath = path.toAbsolutePath().toString();
 		Launcher.runas(commandPath, "");
 		System.exit(0);
+	}
+
+	private static String getCurrentProcessExecutablePath() throws IOException, InterruptedException
+	{
+		// Get current process PID from RuntimeMXBean
+		String jvmName = java.lang.management.ManagementFactory.getRuntimeMXBean().getName();
+		String pid = jvmName.split("@")[0];
+
+		// Use WMIC to get executable path by PID (Windows only)
+		ProcessBuilder pb = new ProcessBuilder("wmic", "process", "where", "ProcessId=" + pid, "get", "ExecutablePath", "/value");
+		Process proc = pb.start();
+
+		try (BufferedReader reader = new BufferedReader(new InputStreamReader(proc.getInputStream())))
+		{
+			String line;
+			while ((line = reader.readLine()) != null)
+			{
+				line = line.trim();
+				if (line.startsWith("ExecutablePath="))
+				{
+					return line.substring("ExecutablePath=".length()).trim();
+				}
+			}
+		}
+
+		proc.waitFor();
+		return null;
 	}
 }

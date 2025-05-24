@@ -48,6 +48,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import lombok.extern.slf4j.Slf4j;
+import lombok.var;
 
 @Slf4j
 public class ConfigurationFrame extends JFrame
