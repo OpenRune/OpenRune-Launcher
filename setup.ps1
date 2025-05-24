@@ -201,7 +201,6 @@ $colorButton.Add_Click({
     if ($colorDialog.ShowDialog() -eq "OK") {
         $colorBox.BackColor = $colorDialog.Color
         $colorSelected = $true
-        ValidateForm
     }
 })
 
@@ -289,7 +288,6 @@ $imageButton.Add_Click({
             $imageValid = $false
         }
     }
-    ValidateForm
 })
 
 
