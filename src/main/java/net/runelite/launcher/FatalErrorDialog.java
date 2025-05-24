@@ -35,15 +35,17 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.InputStream;
+import java.net.ConnectException;
 import java.net.SocketException;
 import java.net.UnknownHostException;
-import java.security.GeneralSecurityException;
+import java.nio.channels.UnresolvedAddressException;
 import java.security.cert.CertificateException;
-import java.util.Objects;
+import java.security.cert.CertificateExpiredException;
+import java.security.cert.CertificateNotYetValidException;
+import java.util.Stack;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.imageio.ImageIO;
-import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLException;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
@@ -70,10 +72,9 @@ public class FatalErrorDialog extends JDialog
 
 	public FatalErrorDialog(String message)
 	{
-		String finalMessage = message.replace("{name}", LauncherProperties.getApplicationName()).replace("{link}", LauncherProperties.getWebsiteLink()).replace("{types}", LauncherProperties.getRuneliteTypeManifest());
 		if (alreadyOpen.getAndSet(true))
 		{
-			throw new IllegalStateException("Fatal error during fatal error: " + finalMessage);
+			throw new IllegalStateException("Fatal error during fatal error: " + message);
 		}
 
 		try
@@ -86,7 +87,7 @@ public class FatalErrorDialog extends JDialog
 
 		UIManager.put("Button.select", DARKER_GRAY_COLOR);
 
-		try (InputStream in = FatalErrorDialog.class.getResourceAsStream("runelite_128.png"))
+		try (var in = FatalErrorDialog.class.getResourceAsStream(LauncherProperties.getRuneLite128()))
 		{
 			setIconImage(ImageIO.read(in));
 		}
@@ -94,7 +95,7 @@ public class FatalErrorDialog extends JDialog
 		{
 		}
 
-		try (InputStream in = FatalErrorDialog.class.getResourceAsStream("runelite_splash.png"))
+		try (var in = FatalErrorDialog.class.getResourceAsStream(LauncherProperties.getRuneLiteSplash()))
 		{
 			BufferedImage logo = ImageIO.read(in);
 			JLabel runelite = new JLabel();
@@ -117,7 +118,7 @@ public class FatalErrorDialog extends JDialog
 			}
 		});
 
-		setTitle("Fatal error starting " + LauncherProperties.getApplicationName());
+		setTitle("Fatal error starting " + LauncherProperties.getName());
 		setLayout(new BorderLayout());
 
 		Container pane = getContentPane();
@@ -127,14 +128,14 @@ public class FatalErrorDialog extends JDialog
 		leftPane.setBackground(DARKER_GRAY_COLOR);
 		leftPane.setLayout(new BorderLayout());
 
-		JLabel title = new JLabel("There was a fatal error starting " + LauncherProperties.getApplicationName());
+		JLabel title = new JLabel("There was a fatal error starting " + LauncherProperties.getName());
 		title.setForeground(Color.WHITE);
 		title.setFont(font.deriveFont(16.f));
 		title.setBorder(new EmptyBorder(10, 10, 10, 10));
 		leftPane.add(title, BorderLayout.NORTH);
 
 		leftPane.setPreferredSize(new Dimension(400, 200));
-		JTextArea textArea = new JTextArea(finalMessage);
+		JTextArea textArea = new JTextArea(message);
 		textArea.setFont(font);
 		textArea.setBackground(DARKER_GRAY_COLOR);
 		textArea.setForeground(Color.LIGHT_GRAY);
@@ -165,7 +166,7 @@ public class FatalErrorDialog extends JDialog
 		addButton("Exit", () -> System.exit(-1));
 
 		pack();
-		Launcher.close();
+		SplashScreen.stop();
 		setLocationRelativeTo(null);
 		setVisible(true);
 	}
@@ -178,8 +179,8 @@ public class FatalErrorDialog extends JDialog
 		button.setBackground(DARK_GRAY_COLOR);
 		button.setForeground(Color.LIGHT_GRAY);
 		button.setBorder(BorderFactory.createCompoundBorder(
-				BorderFactory.createMatteBorder(1, 0, 0, 0, DARK_GRAY_COLOR.brighter()),
-				new EmptyBorder(4, 4, 4, 4)
+			BorderFactory.createMatteBorder(1, 0, 0, 0, DARK_GRAY_COLOR.brighter()),
+			new EmptyBorder(4, 4, 4, 4)
 		));
 		button.setAlignmentX(Component.CENTER_ALIGNMENT);
 		button.setMaximumSize(new Dimension(Integer.MAX_VALUE, Integer.MAX_VALUE));
@@ -206,88 +207,109 @@ public class FatalErrorDialog extends JDialog
 		return this;
 	}
 
-	public static void showWindow(String message)
+	public static void showNetErrorWindow(String action, final Throwable error)
 	{
-		new FatalErrorDialog(message).open();
-	}
+		assert error != null;
 
-	public static void showNetErrorWindow(String action, Throwable err)
-	{
-		if (Objects.equals(err.getMessage(), "No Clients Found"))
+		// reverse the exceptions as typically the most useful one is at the bottom
+		Stack<Throwable> exceptionStack = new Stack<>();
+		int cnt = 1;
+		for (Throwable err = error; err != null; err = err.getCause())
 		{
-			new FatalErrorDialog("{name} was unable to find any clients to display please contact us to get this fixed {types}")
-					.open();
-			return;
+			log.debug("Exception #{}: {}", cnt++, err.getClass().getName());
+			exceptionStack.push(err);
 		}
-		if (err instanceof VerificationException || err instanceof GeneralSecurityException)
+
+		while (!exceptionStack.isEmpty())
 		{
-			new FatalErrorDialog(formatExceptionMessage("{name} was unable to verify the security of its connection to the internet while " +
+			Throwable err = exceptionStack.pop();
+
+			if (err instanceof VerificationException)
+			{
+				new FatalErrorDialog(formatExceptionMessage("RuneLite was unable to verify the security of its connection to the internet while " +
 					action + ". You may have a misbehaving antivirus, internet service provider, a proxy, or an incomplete" +
 					" java installation.", err))
 					.open();
-			return;
-		}
+				return;
+			}
 
-		if (err instanceof SocketException) // includes ConnectException
-		{
-			String message = "{name} is unable to connect to a required server while " + action + ".";
-			// hardcoded error message from PlainSocketImpl.c for WSAEADDRNOTAVAIL
-			if (err.getMessage().equals("connect: Address is invalid on local machine, or port is not valid on remote machine"))
+			if (err instanceof SocketException) // includes ConnectException
 			{
-				message += " Cannot assign requested address. This error is most commonly caused by \"split tunneling\" support in VPN software." +
+				String message = "RuneLite is unable to connect to a required server while " + action + ".";
+
+				// hardcoded error message from PlainSocketImpl.c for WSAEADDRNOTAVAIL
+				if (err.getMessage() != null && err.getMessage().equals("connect: Address is invalid on local machine, or port is not valid on remote machine"))
+				{
+					message += " Cannot assign requested address. This error is most commonly caused by \"split tunneling\" support in VPN software." +
 						" If you are using a VPN, try turning \"split tunneling\" off.";
-			}
-			// WSAEACCES error formatted by NET_ThrowNew()
-			else if (err.getMessage().equals("Permission denied: connect"))
-			{
-				message += " Your internet access is blocked. Firewall or antivirus software may have blocked the connection.";
-			}
-			else
-			{
-				message += " Please check your internet connection.";
-			}
-			new FatalErrorDialog(formatExceptionMessage(message, err))
-					.open();
-			return;
-		}
+				}
+				// connect() returning SOCKET_ERROR:
+				// WSAEACCES error formatted by NET_ThrowNew()
+				else if (err.getMessage() != null && err.getMessage().equals("Permission denied: connect"))
+				{
+					message += " Your internet access is blocked. Firewall or antivirus software may have blocked the connection.";
+				}
+				// finishConnect() waiting for connect() to finish:
+				// Java_sun_nio_ch_SocketChannelImpl_checkConnect throws the error, either from select() returning WSAEACCES
+				// or SO_ERROR being WSAEACCES. NET_ThrowNew adds on the "no further information".
+				else if (err instanceof ConnectException && err.getMessage() != null && err.getMessage().equals("Permission denied: no further information"))
+				{
+					message += " Your internet access is blocked. Firewall or antivirus software may have blocked the connection.";
+				}
+				else
+				{
+					message += " Please check your internet connection.";
+				}
 
-		if (err instanceof UnknownHostException)
-		{
-			new FatalErrorDialog(formatExceptionMessage("{name} is unable to resolve the address of a required server while " + action + ". " +
+				new FatalErrorDialog(formatExceptionMessage(message, err))
+					.open();
+				return;
+			}
+
+			if (err instanceof UnknownHostException || err instanceof UnresolvedAddressException)
+			{
+				new FatalErrorDialog(formatExceptionMessage(LauncherProperties.getName() + " is unable to resolve the address of a required server while " + action + ". " +
 					"Your DNS resolver may be misconfigured, pointing to an inaccurate resolver, or your internet connection may " +
 					"be down.", err))
 					.addButton("Change your DNS resolver", () -> LinkBrowser.browse(LauncherProperties.getDNSChangeLink()))
 					.open();
-			return;
-		}
-
-		if (err instanceof SSLHandshakeException)
-		{
-			if (err.getCause() instanceof CertificateException)
-			{
-				new FatalErrorDialog(formatExceptionMessage("{name} was unable to verify the certificate of a required server while " + action + ". " +
-						"This can be caused by a firewall, antivirus, malware, misbehaving internet service provider, or a proxy.", err))
-						.open();
-			}
-			else
-			{
-				new FatalErrorDialog(formatExceptionMessage("{name} was unable to establish a SSL/TLS connection with a required server while " + action + ". " +
-						"This can be caused by a firewall, antivirus, malware, misbehaving internet service provider, or a proxy.", err))
-						.open();
+				return;
 			}
 
-			return;
+			if (err instanceof CertificateException)
+			{
+				if (err instanceof CertificateNotYetValidException || err instanceof CertificateExpiredException)
+				{
+					new FatalErrorDialog(formatExceptionMessage(LauncherProperties.getName() + " was unable to verify the certificate of a required server while " + action + ". " +
+						"Check your system clock is correct.", err))
+						.open();
+					return;
+				}
+
+				new FatalErrorDialog(formatExceptionMessage("RuneLite was unable to verify the certificate of a required server while " + action + ". " +
+					"This can be caused by a firewall, antivirus, malware, misbehaving internet service provider, or a proxy.", err))
+					.open();
+				return;
+			}
+
+			if (err instanceof SSLException)
+			{
+				new FatalErrorDialog(formatExceptionMessage("RuneLite was unable to establish a SSL/TLS connection with a required server while " + action + ". " +
+					"This can be caused by a firewall, antivirus, malware, misbehaving internet service provider, or a proxy.", err))
+					.open();
+				return;
+			}
 		}
 
-		new FatalErrorDialog(formatExceptionMessage("{name} encountered a fatal error while " + action + ".", err)).open();
+		new FatalErrorDialog(formatExceptionMessage("RuneLite encountered a fatal error while " + action + ".", error)).open();
 	}
 
 	private static String formatExceptionMessage(String message, Throwable err)
 	{
-		String nl = System.getProperty("line.separator");
+		var nl = System.getProperty("line.separator");
 		return message + nl
-				+ nl
-				+ "Exception: " + err.getClass().getSimpleName() + nl
-				+ "Message: " + MoreObjects.firstNonNull(err.getMessage(), "n/a");
+			+ nl
+			+ "Exception: " + err.getClass().getSimpleName() + nl
+			+ "Message: " + MoreObjects.firstNonNull(err.getMessage(), "n/a");
 	}
 }

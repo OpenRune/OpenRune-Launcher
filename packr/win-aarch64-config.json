@@ -1,6 +1,6 @@
 {
   "classPath": [
-    "OpenRune.jar"
+    "RuneLite.jar"
   ],
   "mainClass": "net.runelite.launcher.Launcher",
   "vmArgs": [

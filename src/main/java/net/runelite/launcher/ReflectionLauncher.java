@@ -37,27 +37,28 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 class ReflectionLauncher
 {
-	static void launch(List<File> classpath, Collection<String> clientArgs, String type) throws MalformedURLException
+	static void launch(List<File> classpath, Collection<String> clientArgs) throws MalformedURLException
 	{
 		URL[] jarUrls = new URL[classpath.size()];
 		int i = 0;
-		for (File file : classpath)
+		for (var file : classpath)
 		{
 			log.debug("Adding jar: {}", file);
 			jarUrls[i++] = file.toURI().toURL();
 		}
 
-		ClassLoader parent = ClassLoader.getSystemClassLoader();
+		ClassLoader parent = ClassLoader.getPlatformClassLoader();
 		URLClassLoader loader = new URLClassLoader(jarUrls, parent);
 
 		// Swing requires the UIManager ClassLoader to be set if the LAF
 		// is not in the boot classpath
 		UIManager.put("ClassLoader", loader);
+
 		Thread thread = new Thread(() ->
 		{
 			try
 			{
-				Class<?> mainClass = loader.loadClass(Launcher.clientTypes.get(type).getMain());
+				Class<?> mainClass = loader.loadClass(LauncherProperties.getMain());
 
 				Method main = mainClass.getMethod("main", String[].class);
 				main.invoke(null, (Object) clientArgs.toArray(new String[0]));
@@ -67,7 +68,7 @@ class ReflectionLauncher
 				log.error("Unable to launch client", ex);
 			}
 		});
-		thread.setName(LauncherProperties.getApplicationName());
+		thread.setName(LauncherProperties.getName());
 		thread.start();
 	}
 }

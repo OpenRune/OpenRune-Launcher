@@ -2,12 +2,16 @@
 
 set -e
 
+name="$1"
+nameLowercase="$2"
+
+echo Launcher sha256sum
+sha256sum build/libs/"$name".jar
+
 pushd native
 cmake -DCMAKE_TOOLCHAIN_FILE=arm64-linux-gcc.cmake -B build-aarch64 .
 cmake --build build-aarch64 --config Release
 popd
-
-APPIMAGE_VERSION="13"
 
 umask 022
 
@@ -25,13 +29,13 @@ echo "$LINUX_AARCH64_CHKSUM linux_aarch64_jre.tar.gz" | sha256sum -c
 # Note: Host umask may have checked out this directory with g/o permissions blank
 chmod -R u=rwX,go=rX appimage
 # ...ditto for the build process
-chmod 644 target/OpenRune.jar
+chmod 644 build/libs/"$name".jar
 
-cp native/build-aarch64/src/OpenRune build/linux-aarch64/
-cp target/OpenRune.jar build/linux-aarch64/
-cp packr/linux-aarch64-config.json build/linux-aarch64/config.json
-cp target/filtered-resources/app.desktop build/linux-aarch64/
-cp appimage/app.png build/linux-aarch64/
+cp native/build-aarch64/src/"$name" build/linux-aarch64/
+cp build/libs/"$name".jar build/linux-aarch64/
+cp build/packr/linux-aarch64-config.json build/linux-aarch64/config.json
+cp build/filtered-resources/runelite.desktop build/linux-aarch64/
+cp appimage/runelite.png build/linux-aarch64/
 
 tar zxf linux_aarch64_jre.tar.gz
 mv jdk-$LINUX_AMD64_VERSION-jre build/linux-aarch64/jre
@@ -41,28 +45,17 @@ mkdir -p jre/lib/amd64/server/
 ln -s ../../server/libjvm.so jre/lib/amd64/server/ # packr looks for libjvm at this hardcoded path
 
 # Symlink AppRun -> RuneLite
-ln -s OpenRune AppRun
+ln -s "$name" AppRun
 
-# Ensure RuneLite is executable to all users
-chmod 755 OpenRune
+chmod 755 "$name"
 popd
 
-if ! [ -f appimagetool-x86_64.AppImage ] ; then
-    curl -Lo appimagetool-x86_64.AppImage \
-        https://github.com/AppImage/AppImageKit/releases/download/$APPIMAGE_VERSION/appimagetool-x86_64.AppImage
-    chmod +x appimagetool-x86_64.AppImage
-fi
+curl -z appimagetool-x86_64.AppImage -o appimagetool-x86_64.AppImage -L https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+curl -z runtime-aarch64 -o runtime-aarch64 -L https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-aarch64
 
-echo "df3baf5ca5facbecfc2f3fa6713c29ab9cefa8fd8c1eac5d283b79cab33e4acb  appimagetool-x86_64.AppImage" | sha256sum -c
+chmod +x appimagetool-x86_64.AppImage
 
-if ! [ -f runtime-aarch64 ] ; then
-    curl -Lo runtime-aarch64 \
-	    https://github.com/AppImage/AppImageKit/releases/download/$APPIMAGE_VERSION/runtime-aarch64
-fi
-
-echo "d2624ce8cc2c64ef76ba986166ad67f07110cdbf85112ace4f91611bc634c96a  runtime-aarch64" | sha256sum -c
-
-ARCH=arm_aarch64 ./appimagetool-x86_64.AppImage \
-	--runtime-file runtime-aarch64  \
-	build/linux-aarch64/ \
-	OpenRune-aarch64.AppImage
+./appimagetool-x86_64.AppImage \
+    --runtime-file runtime-aarch64 \
+    build/linux-aarch64/ \
+    "$name"-aarch64.AppImage

@@ -12,10 +12,10 @@ begin
   if CurStep = ssPostInstall then begin
     WriteInstallId();
 
-    rlUpgrade := GetEnv('OPENRUNE_UPGRADE');
+    rlUpgrade := GetEnv('${project.finalName_upper}_UPGRADE');
     if rlUpgrade <> '' then begin
-      exePath := ExpandConstant('{app}\OpenRune.exe');
-      Exec(exePath, GetEnv('OPENRUNE_UPGRADE_PARAMS'), '', SW_SHOW, ewNoWait, ResultCode);
+      exePath := ExpandConstant('{app}\{project.finalName}.exe');
+      Exec(exePath, GetEnv('${project.finalName_upper}_UPGRADE_PARAMS'), '', SW_SHOW, ewNoWait, ResultCode);
     end;
   end;
 end;

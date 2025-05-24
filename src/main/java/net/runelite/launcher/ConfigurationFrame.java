@@ -32,7 +32,8 @@ import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import javax.annotation.Nullable;
 import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
@@ -51,231 +52,253 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class ConfigurationFrame extends JFrame
 {
-    private static final Color DARKER_GRAY_COLOR = new Color(30, 30, 30);
+	private static final Color DARKER_GRAY_COLOR = new Color(30, 30, 30);
 
-    private final JCheckBox chkboxDebug;
-    private final JCheckBox chkboxNoDiffs;
-    private final JCheckBox chkboxSkipTlsVerification;
-    private final JCheckBox chkboxNoUpdates;
-    private final JCheckBox chkboxSafemode;
-    private final JTextField txtScale;
-    private final JTextArea txtClientArguments;
-    private final JTextArea txtJvmArguments;
-    private final JComboBox<HardwareAccelerationMode> comboHardwareAccelMode;
-    private final JComboBox<LaunchMode> comboLaunchMode;
+	private final JCheckBox chkboxDebug;
+	private final JCheckBox chkboxNoDiffs;
+	private final JCheckBox chkboxSkipTlsVerification;
+	private final JCheckBox chkboxNoUpdates;
+	private final JCheckBox chkboxSafemode;
+	private final JCheckBox chkboxIpv4;
+	private final JTextField txtScale;
+	private final JTextArea txtClientArguments;
+	private final JTextArea txtJvmArguments;
+	private final JComboBox<HardwareAccelerationMode> comboHardwareAccelMode;
+	private final JComboBox<LaunchMode> comboLaunchMode;
 
-    private ConfigurationFrame(LauncherSettings settings)
-    {
-        setTitle(LauncherProperties.getApplicationName() + " Launcher Configuration");
+	private ConfigurationFrame(LauncherSettings settings)
+	{
+		setTitle(LauncherProperties.getName() + " Launcher Configuration");
 
-        BufferedImage iconImage;
-        try (InputStream in = SplashScreen.class.getResourceAsStream("runelite_128.png"))
-        {
-            iconImage = ImageIO.read(in);
-        }
-        catch (IOException ex)
-        {
-            throw new RuntimeException(ex);
-        }
+		BufferedImage iconImage;
+		try (var in = ConfigurationFrame.class.getResourceAsStream(LauncherProperties.getRuneLite128()))
+		{
+			iconImage = ImageIO.read(in);
+		}
+		catch (IOException ex)
+		{
+			throw new RuntimeException(ex);
+		}
 
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setIconImage(iconImage);
+		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		setIconImage(iconImage);
 
-        Container pane = getContentPane();
-        pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
-        pane.setBackground(DARKER_GRAY_COLOR);
+		Container pane = getContentPane();
+		pane.setLayout(new BoxLayout(pane, BoxLayout.Y_AXIS));
+		pane.setBackground(DARKER_GRAY_COLOR);
 
-        JPanel topPanel = new JPanel();
-        topPanel.setBackground(DARKER_GRAY_COLOR);
-        topPanel.setLayout(new GridLayout(3, 2, 0, 0));
-        topPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
+		var topPanel = new JPanel();
+		topPanel.setBackground(DARKER_GRAY_COLOR);
+		topPanel.setLayout(new GridLayout(3, 2, 0, 0));
+		topPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 8, 0));
 
-        topPanel.add(chkboxDebug = checkbox(
-                "Debug",
-                "Runs the launcher and client in debug mode. Debug mode writes debug level logging to the log files.",
-                Boolean.TRUE.equals(settings.debug)
-        ));
+		topPanel.add(chkboxDebug = checkbox(
+			"Debug",
+			"Runs the launcher and client in debug mode. Debug mode writes debug level logging to the log files.",
+			Boolean.TRUE.equals(settings.debug)
+		));
 
-        topPanel.add(chkboxNoDiffs = checkbox(
-                "Disable diffs",
-                "Downloads full artifacts for updates instead of diffs.",
-                Boolean.TRUE.equals(settings.nodiffs)
-        ));
+		topPanel.add(chkboxNoDiffs = checkbox(
+			"Disable diffs",
+			"Downloads full artifacts for updates instead of diffs.",
+			Boolean.TRUE.equals(settings.nodiffs)
+		));
 
-        topPanel.add(chkboxSkipTlsVerification = checkbox(
-                "Disable TLS verification",
-                "Disables TLS verification.",
-                Boolean.TRUE.equals(settings.skipTlsVerification)
-        ));
+		topPanel.add(chkboxSkipTlsVerification = checkbox(
+			"Disable TLS verification",
+			"Disables TLS verification.",
+			Boolean.TRUE.equals(settings.skipTlsVerification)
+		));
 
-        topPanel.add(chkboxNoUpdates = checkbox(
-                "Disable updates",
-                "Disables the launcher self updating",
-                Boolean.TRUE.equals(settings.noupdates)
-        ));
+		topPanel.add(chkboxNoUpdates = checkbox(
+			"Disable updates",
+			"Disables the launcher self updating",
+			Boolean.TRUE.equals(settings.noupdates)
+		));
 
-        topPanel.add(chkboxSafemode = checkbox(
-                "Safe mode",
-                "Launches the client in safe mode",
-                Boolean.TRUE.equals(settings.safemode)
-        ));
+		topPanel.add(chkboxSafemode = checkbox(
+			"Safe mode",
+			"Launches the client in safe mode",
+			Boolean.TRUE.equals(settings.safemode)
+		));
 
-        pane.add(topPanel);
+		topPanel.add(chkboxIpv4 = checkbox(
+			"IPv4",
+			"Prefer IPv4 over IPv6",
+			Boolean.TRUE.equals(settings.ipv4)
+		));
 
-        JPanel midPanel = new JPanel();
-        midPanel.setBackground(DARKER_GRAY_COLOR);
-        midPanel.setLayout(new GridLayout(2, 2, 0, 0));
+		pane.add(topPanel);
 
-        midPanel.add(label(
-                "Client arguments",
-                "Arguments passed to the client. One per line."
-        ));
+		var midPanel = new JPanel();
+		midPanel.setBackground(DARKER_GRAY_COLOR);
+		midPanel.setLayout(new GridLayout(2, 2, 0, 0));
 
-        JScrollPane sp = new JScrollPane(txtClientArguments = area(Joiner.on('\n').join(settings.clientArguments)),
-                JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        midPanel.add(sp);
+		midPanel.add(label(
+			"Client arguments",
+			"Arguments passed to the client. One per line."
+		));
 
-        midPanel.add(label(
-                "JVM arguments",
-                "Arguments passed to the JVM. One per line."
-        ));
+		var sp = new JScrollPane(txtClientArguments = area(Joiner.on('\n').join(settings.clientArguments)),
+			JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		midPanel.add(sp);
 
-        sp = new JScrollPane(txtJvmArguments = area(Joiner.on('\n').join(settings.jvmArguments)),
-                JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-        midPanel.add(sp);
+		midPanel.add(label(
+			"JVM arguments",
+			"Arguments passed to the JVM. One per line."
+		));
 
-        pane.add(midPanel);
+		sp = new JScrollPane(txtJvmArguments = area(Joiner.on('\n').join(settings.jvmArguments)),
+			JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		midPanel.add(sp);
 
-        JPanel bottomPanel = new JPanel();
-        bottomPanel.setBackground(DARKER_GRAY_COLOR);
-        bottomPanel.setLayout(new GridLayout(3, 2, 0, 0));
+		pane.add(midPanel);
 
-        bottomPanel.add(label(
-                "Scale",
-                "Scaling factor for Java 2D"
-        ));
-        bottomPanel.add(txtScale = field(settings.scale != null ? Double.toString(settings.scale) : null));
+		var bottomPanel = new JPanel();
+		bottomPanel.setBackground(DARKER_GRAY_COLOR);
+		bottomPanel.setLayout(new GridLayout(3, 2, 0, 0));
 
-        bottomPanel.add(label(
-                "Hardware acceleration",
-                "Hardware acceleration mode for Java 2D."
-        ));
-        bottomPanel.add(comboHardwareAccelMode = combobox(
-                HardwareAccelerationMode.values(),
-                settings.hardwareAccelerationMode
-        ));
+		bottomPanel.add(label(
+			"Scale",
+			"Scaling factor for Java 2D"
+		));
+		bottomPanel.add(txtScale = field(settings.scale != null ? Double.toString(settings.scale) : null));
 
-        bottomPanel.add(label("Launch mode", null));
-        bottomPanel.add(comboLaunchMode = combobox(
-                LaunchMode.values(),
-                settings.launchMode
-        ));
+		bottomPanel.add(label(
+			"Hardware acceleration",
+			"Hardware acceleration mode for Java 2D."
+		));
+		bottomPanel.add(comboHardwareAccelMode = combobox(
+			HardwareAccelerationMode.values(),
+			settings.hardwareAccelerationMode
+		));
 
-        pane.add(bottomPanel);
+		bottomPanel.add(label("Launch mode", null));
+		bottomPanel.add(comboLaunchMode = combobox(
+			LaunchMode.values(),
+			settings.launchMode
+		));
 
-        JPanel buttonPanel = new JPanel();
-        buttonPanel.setBackground(DARKER_GRAY_COLOR);
+		pane.add(bottomPanel);
 
-        JButton save = new JButton("Save");
-        save.addActionListener(this::save);
-        buttonPanel.add(save);
+		var buttonPanel = new JPanel();
+		buttonPanel.setBackground(DARKER_GRAY_COLOR);
 
-        JButton cancel = new JButton("Cancel");
-        cancel.addActionListener(l -> dispose());
-        buttonPanel.add(cancel);
+		var save = new JButton("Save");
+		save.addActionListener(this::save);
+		buttonPanel.add(save);
 
-        pane.add(buttonPanel);
+		var cancel = new JButton("Cancel");
+		cancel.addActionListener(l -> dispose());
+		buttonPanel.add(cancel);
 
-        pack();
-        setLocationRelativeTo(null);
-        setMinimumSize(getSize());
-    }
+		pane.add(buttonPanel);
 
-    private void save(ActionEvent l)
-    {
-        LauncherSettings settings = LauncherSettings.loadSettings();
-        settings.debug = chkboxDebug.isSelected();
-        settings.nodiffs = chkboxNoDiffs.isSelected();
-        settings.skipTlsVerification = chkboxSkipTlsVerification.isSelected();
-        settings.noupdates = chkboxNoUpdates.isSelected();
-        settings.safemode = chkboxSafemode.isSelected();
+		pack();
+		setLocationRelativeTo(null);
+		setMinimumSize(getSize());
+	}
 
-        String t = txtScale.getText();
-        settings.scale = null;
-        if (!t.isEmpty())
-        {
-            try
-            {
-                settings.scale = Double.parseDouble(t);
-            }
-            catch (NumberFormatException ignored)
-            {
-            }
-        }
+	private void save(ActionEvent l)
+	{
+		var settings = LauncherSettings.loadSettings();
+		settings.debug = chkboxDebug.isSelected();
+		settings.nodiffs = chkboxNoDiffs.isSelected();
+		settings.skipTlsVerification = chkboxSkipTlsVerification.isSelected();
+		settings.noupdates = chkboxNoUpdates.isSelected();
+		settings.safemode = chkboxSafemode.isSelected();
+		settings.ipv4 = chkboxIpv4.isSelected();
 
-        settings.clientArguments = Splitter.on('\n')
-                .omitEmptyStrings()
-                .trimResults()
-                .splitToList(txtClientArguments.getText());
+		var t = txtScale.getText();
+		settings.scale = null;
+		if (!t.isEmpty())
+		{
+			try
+			{
+				settings.scale = Double.parseDouble(t);
+			}
+			catch (NumberFormatException ignored)
+			{
+			}
+		}
 
-        settings.jvmArguments = Splitter.on('\n')
-                .omitEmptyStrings()
-                .trimResults()
-                .splitToList(txtJvmArguments.getText());
+		settings.clientArguments = Splitter.on('\n')
+			.omitEmptyStrings()
+			.trimResults()
+			.splitToList(txtClientArguments.getText());
 
-        settings.hardwareAccelerationMode = (HardwareAccelerationMode) comboHardwareAccelMode.getSelectedItem();
-        settings.launchMode = (LaunchMode) comboLaunchMode.getSelectedItem();
+		settings.jvmArguments = Splitter.on('\n')
+			.omitEmptyStrings()
+			.trimResults()
+			.splitToList(txtJvmArguments.getText());
 
-        LauncherSettings.saveSettings(settings);
+		settings.hardwareAccelerationMode = (HardwareAccelerationMode) comboHardwareAccelMode.getSelectedItem();
+		settings.launchMode = (LaunchMode) comboLaunchMode.getSelectedItem();
 
-        log.info("Updated launcher configuration:" + System.lineSeparator() + "{}", settings.configurationStr());
+		LauncherSettings.saveSettings(settings);
 
-        dispose();
-    }
+		// IPv4 change requires patching packr config
+		PackrConfig.patch(config ->
+		{
+			List<String> vmArgs = (List) config.computeIfAbsent("vmArgs", k -> new ArrayList<>());
+			if (settings.ipv4)
+			{
+				vmArgs.add("-Djava.net.preferIPv4Stack=true");
+			}
+			else
+			{
+				vmArgs.remove("-Djava.net.preferIPv4Stack=true");
+			}
+		});
 
-    private static JLabel label(String name, String tooltip)
-    {
-        JLabel label = new JLabel(name);
-        label.setToolTipText(tooltip);
-        label.setForeground(Color.WHITE);
-        return label;
-    }
+		log.info("Updated launcher configuration:" + System.lineSeparator() + "{}", settings.configurationStr());
 
-    private static JTextField field(@Nullable String value)
-    {
-        return new JTextField(value);
-    }
+		dispose();
+	}
 
-    private static JTextArea area(@Nullable String value)
-    {
-        return new JTextArea(value, 2, 20);
-    }
+	private static JLabel label(String name, String tooltip)
+	{
+		var label = new JLabel(name);
+		label.setToolTipText(tooltip);
+		label.setForeground(Color.WHITE);
+		return label;
+	}
 
-    private static JCheckBox checkbox(String name, String tooltip, boolean checked)
-    {
-        JCheckBox checkbox = new JCheckBox(name);
-        checkbox.setSelected(checked);
-        checkbox.setToolTipText(tooltip);
-        checkbox.setForeground(Color.WHITE);
-        checkbox.setBackground(DARKER_GRAY_COLOR);
-        return checkbox;
-    }
+	private static JTextField field(@Nullable String value)
+	{
+		return new JTextField(value);
+	}
 
-    private static <E> JComboBox<E> combobox(E[] values, E default_)
-    {
-        JComboBox combobox = new JComboBox<>(values);
-        combobox.setSelectedItem(default_);
-        return combobox;
-    }
+	private static JTextArea area(@Nullable String value)
+	{
+		return new JTextArea(value, 2, 20);
+	}
 
-    static void open()
-    {
-        new ConfigurationFrame(LauncherSettings.loadSettings())
-                .setVisible(true);
-    }
+	private static JCheckBox checkbox(String name, String tooltip, boolean checked)
+	{
+		var checkbox = new JCheckBox(name);
+		checkbox.setSelected(checked);
+		checkbox.setToolTipText(tooltip);
+		checkbox.setForeground(Color.WHITE);
+		checkbox.setBackground(DARKER_GRAY_COLOR);
+		return checkbox;
+	}
 
-    public static void main(String[] args)
-    {
-        open();
-    }
+	private static <E> JComboBox<E> combobox(E[] values, E default_)
+	{
+		var combobox = new JComboBox<>(values);
+		combobox.setSelectedItem(default_);
+		return combobox;
+	}
+
+	static void open()
+	{
+		new ConfigurationFrame(LauncherSettings.loadSettings())
+			.setVisible(true);
+	}
+
+	public static void main(String[] args)
+	{
+		open();
+	}
 }

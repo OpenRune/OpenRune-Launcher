@@ -26,9 +26,15 @@ package net.runelite.launcher;
 
 import com.google.common.base.MoreObjects;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
-
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -60,6 +66,7 @@ class LauncherSettings
 	boolean skipTlsVerification;
 	boolean noupdates;
 	boolean safemode;
+	boolean ipv4;
 	@Nullable
 	Double scale;
 	List<String> clientArguments = Collections.emptyList();
@@ -94,17 +101,17 @@ class LauncherSettings
 		if (options.has("J"))
 		{
 			jvmArguments = options.valuesOf("J").stream()
-					.filter(String.class::isInstance)
-					.map(String.class::cast)
-					.collect(Collectors.toList());
+				.filter(String.class::isInstance)
+				.map(String.class::cast)
+				.collect(Collectors.toList());
 		}
 
 		if (!options.nonOptionArguments().isEmpty()) // client arguments
 		{
 			clientArguments = options.nonOptionArguments().stream()
-					.filter(String.class::isInstance)
-					.map(String.class::cast)
-					.collect(Collectors.toList());
+				.filter(String.class::isInstance)
+				.map(String.class::cast)
+				.collect(Collectors.toList());
 		}
 
 		if (options.has("hw-accel"))
@@ -116,7 +123,7 @@ class LauncherSettings
 			hardwareAccelerationMode = (HardwareAccelerationMode) options.valueOf("mode");
 		}
 
-		// we use runelite.launcher.reflect to signal to use the reflect launch mode from packr
+		// we use runelite.launcher.reflect to signal to use the reflect launch mode from the debug plugin
 		if ("true".equals(System.getProperty("runelite.launcher.reflect")))
 		{
 			launchMode = LaunchMode.REFLECT;
@@ -131,38 +138,40 @@ class LauncherSettings
 	{
 		return MessageFormatter.arrayFormat(
 				" debug: {}" + System.lineSeparator() +
-						" nodiffs: {}" + System.lineSeparator() +
-						" skip tls verification: {}" + System.lineSeparator() +
-						" noupdates: {}" + System.lineSeparator() +
-						" safe mode: {}" + System.lineSeparator() +
-						" scale: {}" + System.lineSeparator() +
-						" client arguments: {}" + System.lineSeparator() +
-						" jvm arguments: {}" + System.lineSeparator() +
-						" hardware acceleration mode: {}" + System.lineSeparator() +
-						" launch mode: {}",
-				new Object[]{
-						debug,
-						nodiffs,
-						skipTlsVerification,
-						noupdates,
-						safemode,
-						scale == null ? "system" : scale,
-						clientArguments.isEmpty() ? "none" : clientArguments,
-						jvmArguments.isEmpty() ? "none" : jvmArguments,
-						hardwareAccelerationMode,
-						launchMode
-				}
+				" nodiffs: {}" + System.lineSeparator() +
+				" skip tls verification: {}" + System.lineSeparator() +
+				" noupdates: {}" + System.lineSeparator() +
+				" safe mode: {}" + System.lineSeparator() +
+				" ipv4: {}" + System.lineSeparator() +
+				" scale: {}" + System.lineSeparator() +
+				" client arguments: {}" + System.lineSeparator() +
+				" jvm arguments: {}" + System.lineSeparator() +
+				" hardware acceleration mode: {}" + System.lineSeparator() +
+				" launch mode: {}",
+			new Object[]{
+				debug,
+				nodiffs,
+				skipTlsVerification,
+				noupdates,
+				safemode,
+				ipv4,
+				scale == null ? "system" : scale,
+				clientArguments.isEmpty() ? "none" : clientArguments,
+				jvmArguments.isEmpty() ? "none" : jvmArguments,
+				hardwareAccelerationMode,
+				launchMode
+			}
 		).getMessage();
 	}
 
 	@Nonnull
 	static LauncherSettings loadSettings()
 	{
-		File settingsFile = new File(LAUNCHER_SETTINGS).getAbsoluteFile();
-		try (InputStreamReader in = new InputStreamReader(new FileInputStream(settingsFile), StandardCharsets.UTF_8))
+		var settingsFile = new File(LAUNCHER_SETTINGS).getAbsoluteFile();
+		try (var in = new InputStreamReader(new FileInputStream(settingsFile), StandardCharsets.UTF_8))
 		{
-			LauncherSettings settings = new Gson()
-					.fromJson(in, LauncherSettings.class);
+			var settings = new Gson()
+				.fromJson(in, LauncherSettings.class);
 			return MoreObjects.firstNonNull(settings, new LauncherSettings());
 		}
 		catch (FileNotFoundException ex)
@@ -179,20 +188,23 @@ class LauncherSettings
 
 	static void saveSettings(LauncherSettings settings)
 	{
-		File settingsFile = new File(LAUNCHER_SETTINGS).getAbsoluteFile();
+		var settingsFile = new File(LAUNCHER_SETTINGS).getAbsoluteFile();
 
 		try
 		{
 			File tmpFile = File.createTempFile(LAUNCHER_SETTINGS, "json");
-			Gson gson = new Gson();
+			Gson gson = new GsonBuilder()
+				.setPrettyPrinting()
+				.create();
 
 			try (FileOutputStream fout = new FileOutputStream(tmpFile);
-				 FileChannel channel = fout.getChannel();
-				 OutputStreamWriter writer = new OutputStreamWriter(fout, StandardCharsets.UTF_8))
+				FileChannel channel = fout.getChannel();
+				OutputStreamWriter writer = new OutputStreamWriter(fout, StandardCharsets.UTF_8))
 			{
 				channel.lock();
 				gson.toJson(settings, writer);
 				writer.flush();
+				channel.force(true);
 				// FileChannel.close() frees the lock
 			}
 

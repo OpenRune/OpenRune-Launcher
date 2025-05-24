@@ -37,11 +37,14 @@ public class LauncherProperties
 	private static final String TROUBLESHOOTING_LINK = "runelite.wiki.troubleshooting.link";
 	private static final String DNS_CHANGE_LINK = "runelite.dnschange.link";
 	private static final String DOWNLOAD_LINK = "runelite.download.link";
-	private static final String RUNELITE_TYPE_MANIFEST = "runelite.type.manifest";
-
-	private static final String WEBSITE_LINK = "runelite.website";
-
+	private static final String BOOTSTRAP = "runelite.bootstrap";
+	private static final String BOOTSTRAPSIG = "runelite.bootstrapsig";
+	private static final String MAIN = "runelite.main";
+	private static final String RUNELITE_128 = "runelite.128";
+	private static final String RUNELITE_SPLASH = "runelite.splash";
 	private static final String APP_NAME = "runelite.name";
+	private static final String APP_NAME_LOWER = "runelite.name.lower";
+	private static final String WEBSITE = "runelite.website";
 
 	private static final Properties properties = new Properties();
 
@@ -79,16 +82,6 @@ public class LauncherProperties
 		return properties.getProperty(TROUBLESHOOTING_LINK);
 	}
 
-	public static String getWebsiteLink()
-	{
-		return properties.getProperty(WEBSITE_LINK);
-	}
-
-	public static String getApplicationName()
-	{
-		return properties.getProperty(APP_NAME);
-	}
-
 	public static String getDNSChangeLink()
 	{
 		return properties.getProperty(DNS_CHANGE_LINK);
@@ -99,9 +92,43 @@ public class LauncherProperties
 		return properties.getProperty(DOWNLOAD_LINK);
 	}
 
-	public static String getRuneliteTypeManifest()
+	public static String getBootstrap()
 	{
-		return properties.getProperty(RUNELITE_TYPE_MANIFEST);
+		return properties.getProperty(BOOTSTRAP);
 	}
 
+	public static String getBootstrapSig()
+	{
+		return properties.getProperty(BOOTSTRAPSIG);
+	}
+
+	public static String getMain()
+	{
+		return properties.getProperty(MAIN);
+	}
+
+	public static String getName()
+	{
+		return properties.getProperty(APP_NAME);
+	}
+
+	public static String getNameLower()
+	{
+		return properties.getProperty(APP_NAME_LOWER);
+	}
+
+	public static String getRuneLite128()
+	{
+		return properties.getProperty(RUNELITE_128);
+	}
+
+	public static String getWebsite()
+	{
+		return properties.getProperty(WEBSITE);
+	}
+
+	public static String getRuneLiteSplash()
+	{
+		return properties.getProperty(RUNELITE_SPLASH);
+	}
 }

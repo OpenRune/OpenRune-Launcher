@@ -2,6 +2,12 @@
 
 set -e
 
+name="$1"
+nameLowercase="$2"
+
+echo Launcher sha256sum
+sha256sum build/libs/"$name".jar
+
 cmake -S liblauncher -B liblauncher/buildaarch64 -A ARM64
 cmake --build liblauncher/buildaarch64 --config Release
 
@@ -81,15 +87,15 @@ jlink \
   --add-modules jdk.xml.dom \
   --add-modules jdk.zipfs
 
-cp native/build-aarch64/src/Release/OpenRune.exe build/win-aarch64/
-cp target/OpenRune.jar build/win-aarch64/
-cp packr/win-aarch64-config.json build/win-aarch64/config.json
+cp native/build-aarch64/src/Release/"$name".exe build/win-aarch64/
+cp build/libs/"$name".jar build/win-aarch64/
+cp build/packr/win-aarch64-config.json build/win-aarch64/config.json
 cp liblauncher/buildaarch64/Release/launcher_aarch64.dll build/win-aarch64/
 
-echo OpenRune.exe aarch64 sha256sum
-sha256sum build/win-aarch64/OpenRune.exe
+echo "$name".exe aarch64 sha256sum
+sha256sum build/win-aarch64/"$name".exe
 
-dumpbin //HEADERS build/win-aarch64/OpenRune.exe
+dumpbin //HEADERS build/win-aarch64/"$name".exe
 
 # We use the filtered iss file
-iscc target/filtered-resources/arch64.iss
+iscc build/filtered-resources/runeliteaarch64.iss

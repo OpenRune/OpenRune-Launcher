@@ -49,15 +49,10 @@ class JvmLauncher
 	{
 		Path javaHome = Paths.get(System.getProperty("java.home"));
 
-		if (!Launcher.forcedJava.isEmpty()) {
-			javaHome = Paths.get(Launcher.forcedJava);
-		} else {
-			if (!Files.exists(javaHome))
-			{
-				throw new FileNotFoundException("JAVA_HOME is not set correctly! directory \"" + javaHome + "\" does not exist.");
-			}
+		if (!Files.exists(javaHome))
+		{
+			throw new FileNotFoundException("JAVA_HOME is not set correctly! directory \"" + javaHome + "\" does not exist.");
 		}
-
 
 		Path javaPath = Paths.get(javaHome.toString(), "bin", "java.exe");
 
@@ -75,14 +70,14 @@ class JvmLauncher
 	}
 
 	static void launch(
-			Bootstrap bootstrap,
-			List<File> classpath,
-			Collection<String> clientArgs,
-			Map<String, String> jvmProps,
-			List<String> jvmArgs,String type) throws IOException
+		Bootstrap bootstrap,
+		List<File> classpath,
+		Collection<String> clientArgs,
+		Map<String, String> jvmProps,
+		List<String> jvmArgs) throws IOException
 	{
 		StringBuilder classPath = new StringBuilder();
-		for (File f : classpath)
+		for (var f : classpath)
 		{
 			if (classPath.length() > 0)
 			{
@@ -119,7 +114,7 @@ class JvmLauncher
 		}
 		arguments.addAll(jvmArgs);
 
-		arguments.add(Launcher.clientTypes.get(type).getMain());
+		arguments.add(LauncherProperties.getMain());
 		arguments.addAll(clientArgs);
 
 		logger.info("Running {}", arguments);
@@ -130,7 +125,7 @@ class JvmLauncher
 
 		if (log.isDebugEnabled())
 		{
-			Launcher.close();
+			SplashScreen.stop();
 
 			try
 			{

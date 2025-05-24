@@ -28,14 +28,22 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonIOException;
 import com.google.gson.JsonSyntaxException;
-
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.launcher.beans.Bootstrap;
 
@@ -43,9 +51,37 @@ import net.runelite.launcher.beans.Bootstrap;
 class PackrConfig
 {
 	// Update the packr config
-	static void updateLauncherArgs(Bootstrap bootstrap)
+	static void updateLauncherArgs(Bootstrap bootstrap, LauncherSettings settings)
 	{
-		OS.OSType os = OS.getOs();
+		String[] bootstrapVmArgs = getVmArgs(bootstrap);
+		if (bootstrapVmArgs == null || bootstrapVmArgs.length == 0)
+		{
+			log.warn("Launcher args are empty");
+			return;
+		}
+
+		List<String> vmArgs = new ArrayList<>(Arrays.asList(bootstrapVmArgs));
+
+		// java.net.preferIPv4Stack needs to be set prior to libnet *loading* (it is read in net_util.c JNI_OnLoad).
+		// Failure to keep preferIPv4Stack consistent between libnet and java/net results in disagreements over
+		// which socket types can be used.
+		if (settings.ipv4)
+		{
+			vmArgs.add("-Djava.net.preferIPv4Stack=true");
+		}
+
+		Map<String, String> env = getEnv(bootstrap);
+
+		patch(config ->
+		{
+			config.put("vmArgs", vmArgs);
+			config.put("env", env);
+		});
+	}
+
+	static void patch(Consumer<Map> configConsumer)
+	{
+		var os = OS.getOs();
 		if (os != OS.OSType.Windows && os != OS.OSType.MacOS)
 		{
 			return;
@@ -58,8 +94,8 @@ class PackrConfig
 		}
 
 		Gson gson = new GsonBuilder()
-				.setPrettyPrinting()
-				.create();
+			.setPrettyPrinting()
+			.create();
 		Map config;
 		try (FileInputStream fin = new FileInputStream(configFile))
 		{
@@ -67,7 +103,7 @@ class PackrConfig
 		}
 		catch (IOException | JsonIOException | JsonSyntaxException e)
 		{
-			log.warn("error deserializing packr vm args!", e);
+			log.warn("error deserializing launcher vm args!", e);
 			return;
 		}
 
@@ -75,27 +111,19 @@ class PackrConfig
 		{
 			// this can't happen when run from the launcher, because an invalid packr config would prevent the launcher itself
 			// from starting. But could happen if the jar launcher was run separately.
-			log.warn("packr config is null!");
+			log.warn("launcher config is null!");
 			return;
 		}
 
-		String[] argsArr = getArgs(bootstrap);
-		if (argsArr == null || argsArr.length == 0)
-		{
-			log.warn("Launcher args are empty");
-			return;
-		}
-
-		config.put("vmArgs", argsArr);
-		config.put("env", getEnv(bootstrap));
+		configConsumer.accept(config);
 
 		try
 		{
-			File tmpFile = File.createTempFile(LauncherProperties.getApplicationName().toLowerCase(), null);
+			File tmpFile = File.createTempFile(LauncherProperties.getNameLower(), null);
 
 			try (FileOutputStream fout = new FileOutputStream(tmpFile);
-				 FileChannel channel = fout.getChannel();
-				 OutputStreamWriter writer = new OutputStreamWriter(fout, StandardCharsets.UTF_8))
+				FileChannel channel = fout.getChannel();
+				OutputStreamWriter writer = new OutputStreamWriter(fout, StandardCharsets.UTF_8))
 			{
 				channel.lock();
 				gson.toJson(config, writer);
@@ -113,14 +141,16 @@ class PackrConfig
 				log.debug("atomic move not supported", ex);
 				Files.move(tmpFile.toPath(), configFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
 			}
+
+			log.debug("patched packr config");
 		}
 		catch (IOException e)
 		{
-			log.warn("error updating packr vm args!", e);
+			log.warn("error updating launcher vm args!", e);
 		}
 	}
 
-	private static String[] getArgs(Bootstrap bootstrap)
+	private static String[] getVmArgs(Bootstrap bootstrap)
 	{
 		return Launcher.isJava17() ? getArgsJvm17(bootstrap) : getArgsJvm11(bootstrap);
 	}
