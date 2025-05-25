@@ -230,14 +230,58 @@ function Resize-Image {
     return $newBitmap
 }
 
-function Save-IconFile {
-    param(
-        [System.Drawing.Image]$image,
-        [string]$path
-    )
-    # Save as PNG icon file (Windows .ico format requires special encoding,
-    # here just saving PNG with .ico extension, usually okay for modern Windows)
-    $image.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+function Save-IconFile($bitmap, $filePath) {
+    # Resize to 128x128 (if needed)
+    $size = 128
+    if ($bitmap.Width -ne $size -or $bitmap.Height -ne $size) {
+        $resized = New-Object System.Drawing.Bitmap $size, $size
+        $graphics = [System.Drawing.Graphics]::FromImage($resized)
+        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.DrawImage($bitmap, 0, 0, $size, $size)
+        $graphics.Dispose()
+    }
+    else {
+        $resized = $bitmap
+    }
+
+    # Convert bitmap to PNG bytes
+    $msPng = New-Object System.IO.MemoryStream
+    $resized.Save($msPng, [System.Drawing.Imaging.ImageFormat]::Png)
+    $pngBytes = $msPng.ToArray()
+    $msPng.Dispose()
+
+    if ($resized -ne $bitmap) {
+        $resized.Dispose()
+    }
+
+    # Write ICO file structure for a single PNG icon
+
+    $fs = [System.IO.File]::Open($filePath, [System.IO.FileMode]::Create)
+    $bw = New-Object System.IO.BinaryWriter $fs
+
+    try {
+        # ICONDIR header (6 bytes)
+        $bw.Write([UInt16]0)        # Reserved, must be 0
+        $bw.Write([UInt16]1)        # Type 1 = icon
+        $bw.Write([UInt16]1)        # One image
+
+        # ICONDIRENTRY (16 bytes)
+        $bw.Write([byte]128)        # Width (128)
+        $bw.Write([byte]128)        # Height (128)
+        $bw.Write([byte]0)          # ColorCount (0 for PNG)
+        $bw.Write([byte]0)          # Reserved
+        $bw.Write([UInt16]1)        # Planes (1)
+        $bw.Write([UInt16]32)       # BitCount (32-bit)
+        $bw.Write([UInt32]$pngBytes.Length) # Size of PNG data
+        $bw.Write([UInt32]22)       # Offset of image data (6 + 16)
+
+        # Write PNG image data
+        $bw.Write($pngBytes)
+    }
+    finally {
+        $bw.Close()
+        $fs.Close()
+    }
 }
 
 # Validation function to enable Submit button only if all fields valid
