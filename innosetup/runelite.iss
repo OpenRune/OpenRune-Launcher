@@ -13,7 +13,7 @@ PrivilegesRequired=lowest
 
 WizardSmallImageFile=${project.projectDir}/innosetup/runelite_small.bmp
 SetupIconFile=${project.projectDir}/innosetup/runelite.ico
-WizardImageFile=${basedir}/innosetup/left.bmp
+WizardImageFile=${project.projectDir}/innosetup/left.bmp
 UninstallDisplayIcon={app}\${project.finalName}.exe
 
 Compression=lzma2
