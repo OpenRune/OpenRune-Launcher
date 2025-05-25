@@ -330,12 +330,12 @@ $submitButton.Add_Click({
     }
 
     $outputs = @(
-        @{ Path = "root/appimage/runelite.png"; Size = 128; Format = "Png" },
-        @{ Path = "root/src/resources/main/net/runelite/launcher/runelite_128.png"; Size = 128; Format = "Png" },
-        @{ Path = "root/src/resources/main/net/runelite/launcher/runelite_splash.png"; Size = 200; Format = "Png" },
-        @{ Path = "root/innosetup/runelite_small.bmp"; Size = 55; Format = "Bmp" },
-        @{ Path = "root/innosetup/runelite.ico"; Size = 128; Format = "Ico" },
-        @{ Path = "root/native/src/win32/runelite.ico"; Size = 128; Format = "Ico" }
+        @{ Path = "appimage/runelite.png"; Size = 128; Format = "Png" },
+        @{ Path = "src/resources/main/net/runelite/launcher/runelite_128.png"; Size = 128; Format = "Png" },
+        @{ Path = "src/resources/main/net/runelite/launcher/runelite_splash.png"; Size = 200; Format = "Png" },
+        @{ Path = "innosetup/runelite_small.bmp"; Size = 55; Format = "Bmp" },
+        @{ Path = "innosetup/runelite.ico"; Size = 128; Format = "Ico" },
+        @{ Path = "native/src/win32/runelite.ico"; Size = 128; Format = "Ico" }
     )
 
     foreach ($out in $outputs) {
