@@ -24,6 +24,7 @@
  */
 package net.runelite.launcher;
 
+import java.awt.*;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
@@ -45,6 +46,7 @@ public class LauncherProperties
 	private static final String APP_NAME = "runelite.name";
 	private static final String APP_NAME_LOWER = "runelite.name.lower";
 	private static final String WEBSITE = "runelite.website";
+	private static final String COLOR_SCHEME = "runelite.color";
 
 	private static final Properties properties = new Properties();
 
@@ -130,5 +132,10 @@ public class LauncherProperties
 	public static String getRuneLiteSplash()
 	{
 		return properties.getProperty(RUNELITE_SPLASH);
+	}
+
+	public static String getRuneColorScheme()
+	{
+		return properties.getProperty(COLOR_SCHEME);
 	}
 }

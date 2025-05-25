@@ -50,7 +50,7 @@ import lombok.var;
 @Slf4j
 public class SplashScreen extends JFrame implements ActionListener
 {
-	private static final Color BRAND_ORANGE = new Color(220, 138, 0);
+	private static Color BRAND_ORANGE = Color.ORANGE;
 	private static final Color DARKER_GRAY_COLOR = new Color(30, 30, 30);
 
 	private static final int WIDTH = 200;
@@ -70,6 +70,8 @@ public class SplashScreen extends JFrame implements ActionListener
 
 	private SplashScreen() throws IOException
 	{
+		System.out.println(LauncherProperties.getRuneColorScheme());
+		BRAND_ORANGE = Color.decode(LauncherProperties.getRuneColorScheme());
 		setTitle(LauncherProperties.getName() + " Launcher");
 
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
